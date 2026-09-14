@@ -44,6 +44,8 @@
     - [Configuration Deep Dive](#configuration-deep-dive)
   - [The Deep Dive: What Happens at Each Step](#the-deep-dive-what-happens-at-each-step)
   - [Performance at a Glance](#performance-at-a-glance)
+- [Demo Video](#demo-video)
+  - [Cache in Action: First Build vs Cache Hit](#cache-in-action-first-build-vs-cache-hit)
 - [Demonstration Output](#demonstration-output)
 - [Project Structure](#project-structure)
 - [Key Features](#key-features)
@@ -676,6 +678,23 @@ You just run `bazel build`! 🎉
 | **One file changed** | 350ms | Only recompile changed file |
 | **Team with shared cache** | 150ms avg | 80-90% hit rate expected |
 | **CI rebuild** (no changes) | 150ms | Metadata lookup only |
+
+---
+
+## Demo Video
+
+### Cache in Action: First Build vs Cache Hit
+
+Watch the cache server in action! This demo shows:
+- **First Build**: Full compilation + cache upload (~850ms)
+- **Second Build**: Download from cache + link (~200ms)
+- **Result**: 4-5x speedup with remote caching! ⚡
+
+<div align="center">
+
+![Bazel Remote Cache Demo](docs/videos/demo.gif)
+
+</div>
 
 ---
 
