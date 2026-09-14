@@ -1,0 +1,35 @@
+# Auto detect text files and normalize line endings to LF
+* text=auto
+
+# Source code
+*.cc text eol=lf
+*.h text eol=lf
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.c text eol=lf
+
+# Scripts
+*.sh text eol=lf
+*.py text eol=lf
+Makefile text eol=lf
+
+# Bazel
+BUILD text eol=lf
+MODULE.bazel text eol=lf
+WORKSPACE text eol=lf
+*.bazelrc text eol=lf
+
+# Documentation
+*.md text eol=lf
+*.txt text eol=lf
+
+# YAML/Config
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+
+# Git should not touch binary files
+*.o binary
+*.a binary
+*.so binary
+*.dylib binary

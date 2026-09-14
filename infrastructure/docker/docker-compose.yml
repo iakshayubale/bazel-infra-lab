@@ -1,0 +1,76 @@
+services:
+  # bazel-remote cache server (lightweight, caching-only)
+  # Open-source remote cache for Bazel build system
+  # Stores build artifacts for team sharing via Content Addressable Storage (CAS)
+  # See: https://github.com/buchgr/bazel-remote
+  bazel-remote:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bazel-remote-server
+    ports:
+      # Cache server API (gRPC + HTTP)
+      - "8085:8085"
+    volumes:
+      # Persist bazel-remote cache across container restarts
+      # This directory stores all CAS artifacts and action cache entries
+      - bazel-remote-cache:/var/bazel-remote/cache
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - bazel-remote-network
+
+  # ============================================================================
+  # REMOTE EXECUTION WITH BuildBuddy (Optional - Currently Disabled)
+  # ============================================================================
+  # This POC uses bazel-remote (caching only) by default.
+  # To enable distributed builds with BuildBuddy remote execution, uncomment below.
+  # Requires BuildBuddy image (gcr.io/buildbuddy-io/buildbuddy-executor)
+  # 
+  # How it works:
+  # - Caching Only (Current): Your machine compiles → uploads result → team downloads
+  # - Remote Execution (BuildBuddy): You send source → remote workers compile → download result
+  #
+  # To switch to BuildBuddy:
+  # 1. Uncomment the executor service below
+  # 2. Update docker-compose to use BuildBuddy image instead of bazel-remote
+  # 3. Configure authentication for gcr.io
+  # ============================================================================
+  # executor:
+  #   image: gcr.io/buildbuddy-io/buildbuddy-executor:latest
+  #   container_name: bazel-remote-executor
+  #   environment:
+  #     # Executor ID
+  #     - MY_HOSTNAME=executor-1
+  #     # Server address (internal docker network)
+  #     - GRPC_ADDR=bazel-remote:8085
+  #     # Disk space (10GB)
+  #     - EXECUTOR_DOCKER_NETWORK=bazel-remote-network
+  #     # Number of parallel builds
+  #     - EXECUTOR_NUM_LOCAL_WORKERS=4
+  #   volumes:
+  #     # Docker socket for nested builds (if needed)
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #     # Executor temp directory
+  #     - bazel-remote-executor:/tmp/bazel-remote
+  #   depends_on:
+  #     bazel-remote:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+  #   networks:
+  #     - bazel-remote-network
+
+volumes:
+  bazel-remote-cache:
+    driver: local
+  # bazel-remote-executor:  # Uncomment when enabling remote execution
+  #   driver: local
+
+networks:
+  bazel-remote-network:
+    driver: bridge

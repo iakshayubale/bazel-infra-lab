@@ -1,0 +1,94 @@
+name: Tests & Build Verification
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Bazel
+        uses: bazelbuild/setup-bazel@v3
+        with:
+          bazelisk-version: latest
+      
+      - name: Check Bazel version
+        run: bazel --version
+      
+      - name: Build all targets
+        run: |
+          echo "[BUILD] Building all targets..."
+          bazel build //...
+          echo "✅ Build successful"
+      
+      - name: Run all tests
+        run: |
+          echo "[TEST] Running all tests..."
+          bazel test //... --test_output=short
+          echo "✅ All tests passed"
+      
+      - name: Build cache demo
+        run: |
+          echo "[DEMO] Building cache demonstration target..."
+          bazel build //benchmark:cache_demo
+          echo "✅ Cache demo built successfully"
+      
+      - name: Check code formatting (shell scripts)
+        run: |
+          echo "[LINT] Checking shell scripts..."
+          shellcheck scripts/*.sh || true
+      
+      - name: Generate build profile
+        if: failure()
+        run: |
+          bazel build //... --profile=/tmp/profile.gz 2>&1 | head -50 || true
+
+  code-quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Check for secrets
+        run: |
+          echo "[SECURITY] Scanning for hardcoded secrets..."
+          ! grep -r "password\|api_key\|token" --include="*.cc" --include="*.h" --include="*.sh" \
+            . 2>/dev/null | grep -v "demo-api-key" | grep -v "example" | grep -v "TODO" || true
+      
+      - name: Verify .gitignore completeness
+        run: |
+          echo "[CI] Verifying .gitignore..."
+          test -f .gitignore && echo "✅ .gitignore present" || exit 1
+      
+      - name: Check file permissions
+        run: |
+          echo "[CI] Verifying script permissions..."
+          [ -x scripts/setup.sh ] && echo "✅ setup.sh is executable"
+          [ -x scripts/demonstrate-cache.sh ] && echo "✅ demonstrate-cache.sh is executable"
+          [ -x scripts/metrics.sh ] && echo "✅ metrics.sh is executable"
+
+  documentation:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Verify documentation
+        run: |
+          echo "[DOCS] Verifying documentation..."
+          test -f README.md && echo "✅ README.md present"
+          test -f DEVELOPMENT.md && echo "✅ DEVELOPMENT.md present"
+          test -f LICENSE && echo "✅ LICENSE present"
+          test -d docs/ && echo "✅ docs/ directory present"

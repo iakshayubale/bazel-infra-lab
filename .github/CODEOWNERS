@@ -1,0 +1,34 @@
+# CODEOWNERS file for repository ownership
+# This file determines who is automatically requested as reviewer for PRs
+# Last updated: 2026-09-05
+
+# All code
+* @akshayubale
+
+# Build system
+BUILD @akshayubale
+MODULE.bazel @akshayubale
+*.bazelrc @iakshayubale
+
+# Core libraries
+/lib/ @iakshayubale
+
+# Application code
+/app/ @iakshayubale
+
+# Benchmarks and performance
+/benchmark/ @iakshayubale
+
+# Documentation
+*.md @iakshayubale
+/docs/ @iakshayubale
+
+# Infrastructure
+/infrastructure/ @iakshayubale
+
+# Scripts and automation
+/scripts/ @iakshayubale
+Makefile @iakshayubale
+
+# CI/CD
+.github/ @iakshayubale

@@ -1,0 +1,53 @@
+# BuildBuddy Configuration
+# See: https://www.buildbuddy.io/docs/on-prem/self-hosted
+
+app:
+  # Event log storage
+  events_api_url: "http://localhost:8086"
+  build_buddy_url: "http://localhost:8086"
+
+# Cache configuration
+cache:
+  # Use in-memory cache with file backing
+  max_size_bytes: 10737418240  # 10GB
+  
+# Database configuration (SQLite for self-hosted)
+database:
+  data_source: "/var/buildbuddy/buildbuddy.db"
+
+# Executor configuration
+remote_execution_config:
+  # Enable remote execution
+  enable_remote_execution: true
+  # Default instance
+  default_exec_config:
+    runner_count: 4
+  
+# Authentication (disabled by default for local setup)
+auth:
+  enable_anonymous_usage: true
+
+# API configuration
+api:
+  # gRPC port
+  port: 8085
+  
+# HTTP/UI configuration  
+http:
+  # Dashboard port
+  port: 8086
+
+# Logging
+log:
+  level: "info"
+
+# Features
+features:
+  # Enable caching
+  cache: true
+  # Enable remote execution
+  remote_execution: true
+  # Enable invocation history
+  invocation_history: true
+  # Enable build metrics
+  build_metrics: true

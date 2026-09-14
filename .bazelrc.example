@@ -1,0 +1,150 @@
+# Bazel Remote Build Configuration Example
+# Copy this file to .bazelrc and customize with your BuildBuddy instance
+
+# ============================================================================
+# Common settings (always applied)
+# ============================================================================
+
+# Increase verbosity for debugging
+# common --verbose_failures
+
+# Enable strict mode
+common --strict_java_deps=error
+common --strict_proto_deps=error
+
+# Build with specific C++ standard
+common --cxxopt='-std=c++17'
+common --cxxopt='-fPIC'
+
+# Enable color output
+common --color=yes
+
+# Show progress
+common --show_progress_rate_limit=0.2
+
+# ============================================================================
+# Local Configuration
+# ============================================================================
+
+# Build locally without remote caching
+config:local --noenable_bzlmod
+
+# ============================================================================
+# Remote Caching Configuration
+# ============================================================================
+
+config:remote-cache \
+    --remote_cache=http://localhost:8085 \
+    --remote_header=x-buildbuddy-api-key=demo-api-key \
+    --remote_timeout=3600s \
+    --remote_upload_local_results=true \
+    --build_metadata=REPO_URL=https://github.com/example/repo \
+    --build_metadata=COMMIT_SHA=local-build
+
+# ============================================================================
+# Remote Execution Configuration (Full Remote Build)
+# ============================================================================
+
+config:remote \
+    --config=remote-cache \
+    --remote_executor=http://localhost:8085 \
+    --execution_timeout=3600s \
+    --remote_instance_name=default_instance
+
+# ============================================================================
+# Platform-Specific Remote Execution
+# ============================================================================
+
+# Linux with gcc
+config:remote-linux-gcc \
+    --config=remote \
+    --host_platform=//tools/platforms:linux_gcc \
+    --platforms=//tools/platforms:linux_gcc
+
+# Linux with clang
+config:remote-linux-clang \
+    --config=remote \
+    --host_platform=//tools/platforms:linux_clang \
+    --platforms=//tools/platforms:linux_clang
+
+# ============================================================================
+# CI/CD Configuration (GitHub Actions, etc)
+# ============================================================================
+
+# Production CI/CD settings - maximum optimization
+config:ci \
+    --config=remote \
+    --remote_header=x-buildbuddy-api-key=<API_KEY> \
+    --remote_header=x-buildbuddy-org-id=<ORG_ID> \
+    --jobs=200 \
+    --worker_max_instances=200 \
+    --keep_state_file \
+    --runs_per_test_attempted=1
+
+# ============================================================================
+# Debug Configuration
+# ============================================================================
+
+# Enable detailed remote debugging
+config:remote-debug \
+    --config=remote-cache \
+    --verbose_failures \
+    --remote_verbose=yes \
+    --explain=build_explanation.txt \
+    --profile=/tmp/profile.gz
+
+# Show all remote actions
+config:remote-debug \
+    --sandbox_debug
+
+# ============================================================================
+# Performance Tuning
+# ============================================================================
+
+# Fast incremental builds (cache only, no remote execution)
+config:fast-cache \
+    --config=remote-cache \
+    --jobs=4 \
+    --noremote_upload_local_results
+
+# Maximum parallelism
+config:maximum-parallel \
+    --config=remote \
+    --jobs=256 \
+    --worker_max_instances=256
+
+# ============================================================================
+# Test Configuration
+# ============================================================================
+
+# Run tests with remote execution
+config:test-remote \
+    --config=remote \
+    --test_arg=--timeout=300
+
+# Run tests locally
+config:test-local \
+    --noremote_executor \
+    --test_timeout=300
+
+# ============================================================================
+# Sanitizers (for local builds only)
+# ============================================================================
+
+config:asan \
+    --config=local \
+    --cxxopt='-fsanitize=address' \
+    --cxxopt='-fno-omit-frame-pointer' \
+    --linkopt='-fsanitize=address'
+
+config:ubsan \
+    --config=local \
+    --cxxopt='-fsanitize=undefined' \
+    --linkopt='-fsanitize=undefined'
+
+# ============================================================================
+# Default Configurations
+# ============================================================================
+
+# Default: Use remote caching for local builds
+try-import %workspace%/.bazelrc.local

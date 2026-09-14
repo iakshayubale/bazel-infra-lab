@@ -1,0 +1,119 @@
+name: Bazel Remote Build CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  # BuildBuddy server (change to your hosted instance)
+  BUILDBUDDY_API_URL: https://cloud.buildbuddy.io
+  # BuildBuddy API key (set in GitHub Secrets)
+  BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+  # Optional: Organization ID
+  BUILDBUDDY_ORG_ID: ${{ secrets.BUILDBUDDY_ORG_ID }}
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        config: 
+          - remote-cache    # Remote caching only (fast)
+          - remote          # Full remote execution
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Bazel
+        uses: bazelbuild/setup-bazel@v2
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workspace }}/.bazel-cache
+      
+      - name: Configure Bazel for Remote Execution
+        run: |
+          cp .bazelrc.example .bazelrc.ci
+          cat >> .bazelrc.ci <<EOF
+          # CI configuration
+          common --config=${{ matrix.config }}
+          common --remote_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY}
+          common --build_metadata=REPO_URL=${{ github.server_url }}/${{ github.repository }}
+          common --build_metadata=COMMIT_SHA=${{ github.sha }}
+          common --build_metadata=BRANCH=${{ github.ref }}
+          EOF
+      
+      - name: Build library
+        run: |
+          bazel build \
+            --config=${{ matrix.config }} \
+            --remote_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY} \
+            //lib:math
+      
+      - name: Build application
+        run: |
+          bazel build \
+            --config=${{ matrix.config }} \
+            --remote_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY} \
+            //app:hello
+      
+      - name: Run tests
+        run: |
+          bazel test \
+            --config=${{ matrix.config }} \
+            --remote_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY} \
+            --test_output=short \
+            //...
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results-${{ matrix.config }}
+          path: bazel-testlogs/
+          retention-days: 7
+      
+      - name: Print build summary
+        if: always()
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Config: ${{ matrix.config }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch: ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY
+
+  performance-report:
+    name: Generate Performance Report
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: always()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Bazel
+        uses: bazelbuild/setup-bazel@v2
+      
+      - name: Build with profiling
+        run: |
+          bazel build \
+            --config=remote-cache \
+            --remote_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY} \
+            --profile=/tmp/profile.gz \
+            //app:hello
+      
+      - name: Generate profile report
+        run: |
+          bazel analyze-profile /tmp/profile.gz > profile_report.txt
+          cat profile_report.txt
+      
+      - name: Upload profile
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-profile
+          path: profile_report.txt
+          retention-days: 30

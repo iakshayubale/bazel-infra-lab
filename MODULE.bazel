@@ -1,0 +1,19 @@
+"""Bazel module for remote build infrastructure example."""
+
+module(
+    name = "bazel_infra_lab",
+    version = "0.1.0",
+)
+
+# C++ Rules - required for cc_library, cc_binary, cc_test
+bazel_dep(name = "rules_cc", version = "0.0.8")
+
+# Bazel Skylib - common build utilities
+bazel_dep(name = "bazel_skylib", version = "1.4.1")
+
+# GoogleTest - for unit testing
+bazel_dep(name = "googletest", version = "1.11.0")
+
+# Protocol Buffers - for benchmarking heavy builds
+bazel_dep(name = "protobuf", version = "21.7")
+

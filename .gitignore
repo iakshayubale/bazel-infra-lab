@@ -1,0 +1,51 @@
+# Bazel build outputs
+bazel-bin/
+bazel-genfiles/
+bazel-out/
+bazel-testlogs/
+bazel-*/  # Root directory symlinks created by Bazel
+/bazel-*/
+
+# Bazel cache
+.bazel-cache/
+.bazelrc
+.bazelrc.local
+.bazelrc.ci
+
+# Build artifacts
+build/
+dist/
+*.o
+*.a
+*.so
+*.dylib
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# Docker
+.env
+docker-compose.override.yml
+
+# Logs
+*.log
+
+# Profile data
+*.gz
+profile_report.txt
+
+# Temporary files
+/tmp/
+*.tmp
