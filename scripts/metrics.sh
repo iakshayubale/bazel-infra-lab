@@ -60,10 +60,10 @@ printf "\n"
 printf "%s┌─ 📦 Remote Cache Server Status ─────────────────────────────┐%s\n" "$CYAN" "$NC"
 
 CACHE_RUNNING=false
-if curl -s http://localhost:8085/status >/dev/null 2>&1; then
+if curl -s http://localhost:8080/status >/dev/null 2>&1; then
     CACHE_RUNNING=true
-    CACHE_DATA=$(curl -s http://localhost:8085/status 2>/dev/null)
-    printf "%s✓ bazel-remote cache server is RUNNING on localhost:8085%s\n" "$GREEN" "$NC"
+    CACHE_DATA=$(curl -s http://localhost:8080/status 2>/dev/null)
+    printf "%s✓ bazel-remote cache server is RUNNING on localhost:8080 (gRPC: 9092)%s\n" "$GREEN" "$NC"
     
     log_detail "Cache Utilization:"
     if command -v jq &> /dev/null; then
@@ -221,7 +221,7 @@ log_detail "Local build (no cache):"
 echo "    bazel build //app:hello"
 echo ""
 log_detail "With remote caching:"
-echo "    bazel build //app:hello --remote_cache=http://localhost:8085"
+echo "    bazel build //app:hello --remote_cache=grpc://localhost:9092"
 echo ""
 log_detail "Run all tests:"
 echo "    bazel test //..."

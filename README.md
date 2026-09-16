@@ -237,7 +237,7 @@ Storage:    /var/bazel-remote/cache (persistent volume)
 Network:    bazel-remote-network
 ```
 
-**Nothing else is running**—just `bazel-remote`, the lightweight cache server. BuildBuddy (remote execution) is **disabled by default** and not needed for this POC.
+**Nothing else is running**-just `bazel-remote`, the lightweight cache server. BuildBuddy (remote execution) is **disabled by default** and not needed for this POC.
 
 ---
 
@@ -250,7 +250,7 @@ Bazel's remote cache has two main components, both stored in the persistent Dock
 **1. Action Cache** (`/var/bazel-remote/cache/ac/`) - Stores mapping of `action_key → CAS_digests`\
 **2. CAS (Content Addressable Storage)** (`/var/bazel-remote/cache/cas/`) - Stores actual build artifacts by hash
 
-**Both live in the same persistent volume** — everything survives container restarts!
+**Both live in the same persistent volume** - everything survives container restarts!
 
 #### System Overview
 
@@ -555,7 +555,7 @@ gRPC Request (What Bazel Uses):
 - ✅ **Reliable**: Built-in timeout and error handling
 - ✅ **Standard**: Used by Google Cloud, Kubernetes, and all major Bazel cache servers
 
-**You don't need to understand gRPC internals** — Bazel handles it completely. Just set the `--remote_cache` URL, and Bazel converts it to gRPC automatically!
+**You don't need to understand gRPC internals** - Bazel handles it completely. Just set the `--remote_cache` URL, and Bazel converts it to gRPC automatically!
 
 #### Example: Real Bazel Workflow
 
@@ -587,7 +587,7 @@ $ bazel build --config=remote-cache //app:hello
   4. Server responds: "Found it! Here are the files"
   5. Downloads artifacts via gRPC
   6. Links binary from cache
-  [Second build takes 200ms — 4x faster!]
+  [Second build takes 200ms - 4x faster!]
 ```
 
 #### Visual: How Bazel and Remote Cache Communicate
@@ -1058,7 +1058,7 @@ The following have been implemented and tested in this POC:
 This is a **Proof-of-Concept** designed to educate on how Bazel remote caching works in a simplified environment.
 
 **What is NOT included:**
-- Remote execution (distributed builds) — only caching is demonstrated
+- Remote execution (distributed builds) - only caching is demonstrated
 - Production-scale multi-developer team setup
 - Multi-machine shared cache (single Docker container only)
 - TLS/mTLS security features

@@ -86,10 +86,10 @@ fi
 if [ ! -f "$PROJECT_ROOT/infrastructure/docker/.env" ]; then
     log_info "Creating docker-compose environment file..."
     cat > "$PROJECT_ROOT/infrastructure/docker/.env" <<EOF
-# BuildBuddy Docker Environment
-BUILDBUDDY_VERSION=latest
-BUILDBUDDY_API_URL=http://localhost:8085
-BUILDBUDDY_API_KEY=demo-api-key
+# bazel-remote Cache Server Configuration
+BAZEL_REMOTE_VERSION=latest
+BAZEL_REMOTE_HTTP_PORT=8080
+BAZEL_REMOTE_GRPC_PORT=9092
 CACHE_MAX_SIZE_BYTES=10737418240
 EOF
 fi
@@ -101,25 +101,25 @@ if [ ! -d "$BUILD_CACHE_DIR" ]; then
     mkdir -p "$BUILD_CACHE_DIR"
 fi
 
-# 6. Start BuildBuddy (optional)
-read -p "Start BuildBuddy server now? (y/n) " -n 1 -r
+# 6. Start bazel-remote cache server (optional)
+read -p "Start bazel-remote cache server now? (y/n) " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    log_info "Starting BuildBuddy..."
+    log_info "Starting bazel-remote cache server..."
     cd "$PROJECT_ROOT/infrastructure/docker"
     docker-compose up -d
     
-    # Wait for BuildBuddy to be ready
-    log_info "Waiting for BuildBuddy to be ready..."
+    # Wait for bazel-remote to be ready
+    log_info "Waiting for bazel-remote to be ready..."
     sleep 10
     
     # Check health
-    if curl -f http://localhost:8086/health >/dev/null 2>&1; then
-        log_info "✓ BuildBuddy is running!"
-        log_info "Dashboard: http://localhost:8086"
-        log_info "API: http://localhost:8085"
+    if curl -f http://localhost:8080/status >/dev/null 2>&1; then
+        log_info "✓ bazel-remote is running!"
+        log_info "HTTP endpoint: http://localhost:8080"
+        log_info "gRPC endpoint: grpc://localhost:9092"
     else
-        log_warn "BuildBuddy may not be ready yet. Check with: docker-compose logs"
+        log_warn "bazel-remote may not be ready yet. Check with: docker-compose logs"
     fi
 fi
 
@@ -151,14 +151,16 @@ fi
 cat > "$PROJECT_ROOT/QUICK_START.md" <<'EOF'
 # Quick Start Guide
 
-## Start BuildBuddy
+## Start Remote Cache Server
 
 ```bash
 cd infrastructure/docker
 docker-compose up -d
 ```
 
-Visit dashboard: http://localhost:8086
+Remote cache endpoints:
+- HTTP (monitoring): http://localhost:8080
+- gRPC (Bazel communication): grpc://localhost:9092
 
 ## Build with Remote Caching
 
@@ -176,26 +178,24 @@ bazel build --config=remote-cache //app:hello
 bazel test --config=remote-cache //...
 ```
 
-## View Build Metrics
-
-- Dashboard: http://localhost:8086
-- Check "Invocations" tab for build history
-- Check cache hit rates
-
-## Full Remote Execution
-
-For distributed builds (requires multiple executor nodes):
+## View Cache Status
 
 ```bash
-bazel build --config=remote //app:hello
+curl http://localhost:8080/status | jq .
+```
+
+## Demonstrate Cache Performance
+
+```bash
+./scripts/demonstrate-cache.sh metrics benchmark clear-remote
 ```
 
 ## Troubleshooting
 
-BuildBuddy not responding?
+Cache server not responding?
 ```bash
 docker-compose ps
-docker-compose logs
+docker-compose logs bazel-remote
 ```
 
 See docs/ for detailed guides on:
@@ -213,9 +213,9 @@ echo
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Next steps:"
 echo "1. Review .bazelrc and customize as needed"
-echo "2. Start BuildBuddy: cd infrastructure/docker && docker-compose up -d"
+echo "2. Start cache server: cd infrastructure/docker && docker-compose up -d"
 echo "3. Build with caching: bazel build --config=remote-cache //app:hello"
-echo "4. View dashboard: http://localhost:8086"
+echo "4. Check cache status: curl http://localhost:8080/status"
 echo ""
 echo "Detailed guides:"
 echo "- Local setup: docs/local-setup.md"
