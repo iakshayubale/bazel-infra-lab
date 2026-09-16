@@ -45,7 +45,7 @@ FROM alpine:latest
 
 # Install runtime dependencies only (NOT build tools)
 # - ca-certificates: Needed for HTTPS/TLS connections
-# - curl: Needed for health checks (curl http://localhost:8085/status)
+# - curl: Needed for health checks (curl http://localhost:8080/status)
 # - bash: Convenient shell for scripts
 # Note: Go compiler is NOT installed here - we don't need it for running bazel-remote
 RUN apk add --no-cache ca-certificates curl bash
@@ -66,9 +66,10 @@ COPY --from=builder /tmp/bazel-remote /usr/local/bin/bazel-remote
 # chmod 777 = Allow all processes to read/write to this directory
 RUN mkdir -p /var/bazel-remote/cache && chmod 777 /var/bazel-remote/cache
 
-# Expose the gRPC API port
-# Port 8085 = Default port for bazel-remote cache server
-EXPOSE 8085
+# Expose the cache server ports
+# Port 8080 = HTTP/REST endpoint for monitoring (/status, /health)
+# Port 9092 = gRPC endpoint for Bazel client communication
+EXPOSE 8080 9092
 
 # Health check configuration
 # Periodically check if bazel-remote is alive using HTTP endpoint
