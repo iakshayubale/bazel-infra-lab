@@ -2,7 +2,8 @@
 set -e
 
 # Cache server configuration
-CACHE_SERVER="localhost:8085"
+CACHE_SERVER="localhost:8080"  # HTTP/REST endpoint for status checks
+GRPC_ENDPOINT="grpc://localhost:9092"  # gRPC endpoint for Bazel cache communication
 BUILD_TARGET="//app:hello"
 
 # Color setup for terminal output
@@ -177,7 +178,7 @@ if [ "$CLEAR_REMOTE" = true ]; then
         echo "   Stopping cache server..."
         docker-compose down > /dev/null 2>&1 || true
         echo "   Removing cache volume..."
-        docker volume rm buildbuddy_cache > /dev/null 2>&1 || true
+        docker volume rm docker_bazel-remote-cache > /dev/null 2>&1 || true
         echo "   Restarting cache server..."
         docker-compose up -d > /dev/null 2>&1
         sleep 2  # Give cache server time to start
@@ -203,7 +204,7 @@ fi
 echo ""
 log_detail "Understanding the cache:"
 echo "    • bazel clean:        Clears LOCAL cache only"
-echo "    • Remote cache:       Persists on server (localhost:8085)"
+echo "    • Remote cache:       Persists on server (gRPC: grpc://localhost:9092, HTTP: localhost:8080)"
 echo "    • Cache hit:          Download from remote instead of recompile"
 echo ""
 log_detail "Important Note:"
@@ -212,17 +213,17 @@ echo "    will be recompiled (cache won't help those). For best results,"
 echo "    don't modify source code between builds."
 echo ""
 log_detail "Checking cache server..."
-if ! curl -s http://localhost:8085/status > /dev/null 2>&1; then
+if ! curl -s http://localhost:8080/status > /dev/null 2>&1; then
     echo "    ❌ Cache server not running. Start it with:"
     echo "    cd infrastructure/docker && docker-compose up -d"
     exit 1
 fi
-echo "    ✅ Cache server is healthy on localhost:8085"
+echo "    ✅ Cache server is healthy (HTTP on localhost:8080, gRPC on localhost:9092)"
 printf "%s└────────────────────────────────────────────────────────────┘%s\n" "$CYAN" "$NC"
 echo ""
 
-# Remote cache flags
-CACHE_FLAGS="--remote_cache=http://localhost:8085 --remote_upload_local_results=true"
+# Remote cache flags (use gRPC endpoint for Bazel communication)
+CACHE_FLAGS="--remote_cache=grpc://localhost:9092 --remote_upload_local_results=true"
 
 printf "\n%s┌─ 🎬 CACHE DEMONSTRATION: Real-Time Execution Logging ──────┐%s\n" "$CYAN" "$NC"
 log_detail "How this works:"
@@ -272,7 +273,7 @@ fi
 echo ""
 log_detail "STEPS 2-4: Query Action Cache"
 log_cache_query "GetActionResult($ACTION_DIGEST_SHORT...)"
-echo "    → Sending gRPC request to http://${CACHE_SERVER}"
+echo "    → Sending gRPC request to grpc://localhost:9092"
 
 if [ -n "$ACTION_DIGEST" ]; then
     CACHE_RESULT=$(check_cache_for_action "$ACTION_DIGEST" "$CACHE_SERVER")
@@ -318,6 +319,7 @@ HAS_UPLOAD=$(echo "$SECOND_BUILD_CONTENT" | grep -i "upload" | wc -l)
 # Look for remote cache hit indicator in summary line (e.g., "6 remote cache hit")
 REMOTE_CACHE_HITS=$(echo "$SECOND_BUILD_CONTENT" | grep -oE '[0-9]+ +remote cache hit' | grep -oE '^[0-9]+' | head -1)
 # Look for processes summary line (e.g., "17 processes: 6 remote cache hit, 11 internal")
+# Note: Cache communication uses gRPC on port 9092, monitoring uses HTTP on port 8080
 SUMMARY_LINE=$(echo "$SECOND_BUILD_CONTENT" | grep -E "processes.*remote" | tail -1)
 
 # Extract action digest from second build
@@ -353,7 +355,7 @@ fi
 echo ""
 log_detail "STEPS 2-4: Query Action Cache"
 log_cache_query "GetActionResult($ACTION_DIGEST_2_SHORT...)"
-echo "    → Sending gRPC request to http://${CACHE_SERVER}"
+echo "    → Sending gRPC request to grpc://localhost:9092"
 
 # Determine actual cache result based on build output analysis
 if [ -n "$REMOTE_CACHE_HITS" ] && [ "$REMOTE_CACHE_HITS" -gt 0 ]; then
@@ -390,7 +392,7 @@ fi
 echo ""
 
 log_detail "Action Cache Lookup Details"
-CACHE_STATUS=$(curl -s "http://${CACHE_SERVER}/status" 2>/dev/null)
+CACHE_STATUS=$(curl -s "http://localhost:8080/status" 2>/dev/null)
 if [ -n "$CACHE_STATUS" ]; then
     NUM_FILES=$(echo "$CACHE_STATUS" | jq -r '.NumFiles // 0' 2>/dev/null)
     CACHE_SIZE=$(echo "$CACHE_STATUS" | jq -r '.CurrSize // 0' 2>/dev/null)
@@ -414,7 +416,7 @@ echo ""
 rm -f "$SECOND_BUILD_OUTPUT"
 
 printf "%s┌─ 📊 STEP 3: Remote Cache Statistics ───────────────────────┐%s\n" "$CYAN" "$NC"
-FINAL_STATUS=$(curl -s http://localhost:8085/status 2>/dev/null)
+FINAL_STATUS=$(curl -s http://localhost:8080/status 2>/dev/null)
 
 if [ -n "$FINAL_STATUS" ]; then
     CURR_SIZE=$(echo "$FINAL_STATUS" | jq -r '.CurrSize // 0' 2>/dev/null)
@@ -454,7 +456,7 @@ if [ -n "$FINAL_STATUS" ]; then
     echo ""
     log_detail "Server Info:"
     echo "    Last updated: $(format_timestamp "$SERVER_TIME")"
-    HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8085/status 2>/dev/null)
+    HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/status 2>/dev/null)
     echo "    Status: HTTP $HTTP_CODE (Server running)"
     echo "    Active goroutines: $NUM_GOROUTINES"
     if [ "$GIT_COMMIT" != "" ] && [ "$GIT_COMMIT" != "unknown" ]; then
