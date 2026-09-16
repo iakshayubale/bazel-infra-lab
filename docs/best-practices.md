@@ -1,8 +1,8 @@
 # Best Practices for Bazel Remote Builds
 
-> **Note**: These are production-tested strategies referenced from industry experience. The current POC demonstrates basic cache functionality. Advanced strategies (deterministic builds, policy enforcement, etc.) are applicable when scaling beyond this POC.
+> **Note**: These are tested strategies referenced from industry experience. The current POC demonstrates basic cache functionality. Advanced strategies (deterministic builds, policy enforcement, etc.) are applicable when scaling beyond this POC.
 
-Production-tested strategies for maximizing cache hit rates, build performance, and cost efficiency.
+Tested strategies for maximizing cache hit rates, build performance, and cost efficiency.
 
 ## 1. Maximize Cache Hit Rates
 
@@ -343,7 +343,7 @@ bazel build --profile=/tmp/profile.gz //...
 Protect your cache server:
 
 ```bash
-# Use HTTPS/TLS in production
+# Use HTTPS/TLS
 --http_address=0.0.0.0:443 \
 --tls_cert=/path/to/cert.pem \
 --tls_key=/path/to/key.pem
@@ -424,5 +424,3 @@ Monitor cache hit rates to identify issues early.
 - [bazel-remote GitHub](https://github.com/buchgr/bazel-remote)
 - [Remote Build Execution Protocol](https://github.com/bazelbuild/remote-apis)
 - [Cache Best Practices](docs/cache-explanation.md)
-- [Production Setup](docs/production-setup.md)
-- [Scaling Guide](docs/scaling.md)

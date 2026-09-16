@@ -290,7 +290,7 @@ config:local \
 
 - **Performance Analysis**: Use `--profile` flag to analyze build bottlenecks
 - **CI/CD Integration**: Set up GitHub Actions to populate cache
-- **Team Sharing**: Deploy bazel-remote on shared infrastructure (see `docs/production-setup.md`)
+- **Team Sharing**: Deploy bazel-remote on shared infrastructure
 - **Monitoring**: Track cache hit rates and storage usage over time
 
 ## Additional Resources

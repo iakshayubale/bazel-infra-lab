@@ -10,7 +10,7 @@
 
 </div>
 
-> **Proof-of-Concept Notice**: This project demonstrates remote build caching using a **self-hosted local `bazel-remote` server**. It serves as an educational reference for understanding how Bazel's remote caching works in a simplified environment before scaling to production infrastructure.
+> **Proof-of-Concept Notice**: This project demonstrates remote build caching using a **self-hosted local `bazel-remote` server**. It serves as an educational reference for understanding how Bazel's remote caching works in a simplified environment infrastructure.
 
 ---
 
@@ -32,7 +32,11 @@
   - [What's Actually Running](#whats-actually-running)
 - [Understanding Remote Cache](#understanding-remote-cache)
   - [The Architecture](#the-architecture)
-  - [The Complete Flow](#the-complete-flow)
+    - [System Overview](#system-overview)
+    - [Quick Path Reference](#quick-path-reference)
+    - [CACHE HIT Path (Fast: ~200ms)](#cache-hit-path-fast-200ms)
+    - [CACHE MISS Path (Slow: ~850ms)](#cache-miss-path-slow-850ms)
+  - [The Two Paths](#the-two-paths)
   - [Local vs Remote: The Distinction](#local-vs-remote-the-distinction)
   - [How Bazel Connects to Remote Cache: The gRPC Link](#how-bazel-connects-to-remote-cache-the-grpc-link)
     - [The Configuration: Your Bridge to the Cache](#the-configuration-your-bridge-to-the-cache)
@@ -72,7 +76,7 @@
 
 ## What You'll Discover
 
-A **comprehensive, hands-on exploration** of Bazel remote build cache setup with **bazel-remote** (self-hosted, open-source). This project demonstrates production-ready best practices for:
+A **comprehensive, hands-on exploration** of Bazel remote build cache setup with **bazel-remote** (self-hosted, open-source). This project demonstrates best practices for:
 
 | Capability | Benefit |
 | :--- | :--- |
@@ -95,7 +99,7 @@ A **comprehensive, hands-on exploration** of Bazel remote build cache setup with
 - **Local bazel-remote cache server** in Docker
 - **Interactive demonstration scripts** showing real-time cache hits/misses
 - **Performance metrics** and status endpoints monitoring
-- **Production-ready best practices** documentation
+- **Best practices** documentation
 
 </td>
 <td width="50%" valign="top">
@@ -241,85 +245,203 @@ Network:    bazel-remote-network
 
 ### The Architecture
 
+Bazel's remote cache has two main components, both stored in the persistent Docker volume:
+
+**1. Action Cache** (`/var/bazel-remote/cache/ac/`) - Stores mapping of `action_key → CAS_digests`\
+**2. CAS (Content Addressable Storage)** (`/var/bazel-remote/cache/cas/`) - Stores actual build artifacts by hash
+
+**Both live in the same persistent volume** — everything survives container restarts!
+
+#### System Overview
+
 ```mermaid
-graph LR
-    subgraph LOCAL ["LOCAL MACHINE"]
-        BC["Bazel Client"]
+%%{init: {'flowchart': {'htmlLabels': true}, 'theme': 'default', 'themeVariables': { 'subGraphTitleColor': '#000000' }}}%%
+graph TB
+    subgraph LOCAL["<span style='color:#000;'>LOCAL MACHINE</span>"]
+        SRC["Source Files<br/>BUILD rules<br/>Compiler flags"]
+        BC["Bazel Client<br/>(bazel build)"]
+        HASH["Action Key<br/>(SHA256 hash)"]
+        LOCAL_BUILD["🔨 Local Build Execution"]
     end
     
-    subgraph REMOTE ["REMOTE SERVER (Docker)"]
-        GRPC["gRPC Endpoint<br/>localhost:8085"]
-        AC["Action Cache<br/>key → result"]
-        CAS["CAS Storage<br/>hash → artifact"]
-        VOL["Volume Mount<br/>/var/cache"]
+    subgraph NETWORK["<span style='color:#000;'>NETWORK</span>"]
+        GRPC["gRPC Connection<br/>localhost:8085"]
     end
     
-    BC -->|1. Compute<br/>Action Key| GRPC
-    GRPC -->|2. Query| AC
-    AC -->|HIT| GRPC
-    AC -->|MISS| CAS
-    CAS -->|Download| GRPC
-    GRPC -->|Artifacts| BC
-    BC -->|Build & Upload| CAS
-    CAS --> VOL
-    AC --> VOL
+    subgraph DOCKER["<span style='color:#000;'>DOCKER CONTAINER: bazel-remote-server</span>"]
+        SERVER["Remote Cache Server<br/>(bazel-remote)"]
+        
+        subgraph VOL["<span style='color:#000;'>PERSISTENT VOLUME: /var/bazel-remote/cache</span>"]
+            AC["⚙️ Action Cache<br/>(/ac/ key → digests)"]
+            CAS["📦 CAS Storage<br/>(/cas/ hash → artifacts)"]
+        end
+    end
     
-    style LOCAL fill:#e6f5ff,stroke:#0066cc,stroke-width:2px,color:#000
-    style REMOTE fill:#fff5e6,stroke:#ff9900,stroke-width:2px,color:#000
-    style BC fill:#d4e8f7,stroke:#333,stroke-width:2px,color:#000
-    style GRPC fill:#fffacd,stroke:#333,stroke-width:2px,color:#000
-    style AC fill:#e6f2ff,stroke:#333,stroke-width:2px,color:#000
-    style CAS fill:#f0e6ff,stroke:#333,stroke-width:2px,color:#000
-    style VOL fill:#e6ffe6,stroke:#333,stroke-width:2px,color:#000
+    %% Index 0
+    SRC --> BC
+    %% Index 1
+    BC --> HASH
+    
+    %% Index 2: Step 1
+    HASH -->|1. Query Action Key| GRPC
+    %% Index 3: Step 1 cont.
+    GRPC --> SERVER
+    %% Index 4: Step 2
+    SERVER -->|2. AC Lookup| AC
+    
+    %% HIT PATH (Green)
+    %% Index 5: Step 3a
+    AC -->|3a. Digest Found| SERVER
+    %% Index 6: Step 4a
+    SERVER -->|4a. Fetch Artifacts| CAS
+    %% Index 7: Step 5a
+    CAS -->|5a. Stream Artifacts| SERVER
+    %% Index 8: Step 6a
+    SERVER -->|6a. Download| GRPC
+    %% Index 9: Step 7a
+    GRPC -->|7a. Artifacts| BC
+    
+    %% MISS PATH (Red)
+    %% Index 10: Step 3b
+    AC -.->|3b. NOT_FOUND| SERVER
+    %% Index 11: Step 4b
+    SERVER -.->|4b. Cache Miss| GRPC
+    %% Index 12: Step 5b
+    GRPC -.->|5b. Return Miss| BC
+    %% Index 13: Step 6b
+    BC -.->|6b. Trigger| LOCAL_BUILD
+    %% Index 14: Step 7b
+    LOCAL_BUILD -.->|7b. Upload Artifacts| GRPC
+    %% Index 15: Step 8b
+    GRPC -.->|8b. Store Artifacts| SERVER
+    %% Index 16: Step 9b
+    SERVER -.->|9b. Write Blob| CAS
+    %% Index 17: Step 10b
+    SERVER -.->|10b. Update Mapping| AC
+    
+    style LOCAL fill:#e3f2fd,stroke:#1976d2,stroke-width:3px,color:#000
+    style NETWORK fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#000
+    style DOCKER fill:#f3e5f5,stroke:#7b1fa2,stroke-width:3px,color:#000
+    style VOL fill:#e8f5e9,stroke:#1b5e20,stroke-width:3px,color:#000
+    style BC fill:#bbdefb,stroke:#0d47a1,stroke-width:2px,color:#000
+    style LOCAL_BUILD fill:#ffcdd2,stroke:#b71c1c,stroke-width:2px,color:#000
+    style GRPC fill:#ffe0b2,stroke:#e65100,stroke-width:2px,color:#000
+    style SERVER fill:#e1bee7,stroke:#4a148c,stroke-width:2px,color:#000
+    style AC fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px,color:#000
+    style CAS fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px,color:#000
+
+    %% Green Hit Path (Steps 1, 2, 3a, 4a, 5a, 6a, 7a = Indices 2, 3, 4, 5, 6, 7, 8, 9)
+    linkStyle 2,3,4,5,6,7,8,9 stroke:#22c55e,stroke-width:2px;
+
+    %% Red Miss Path (Steps 3b through 10b = Indices 10 through 17)
+    linkStyle 10,11,12,13,14,15,16,17 stroke:#ef4444,stroke-width:2px,stroke-dasharray: 5 5;
+```
+
+#### Quick Path Reference
+
+| Path Type | Speed | Route | Time | Persistence |
+|-----------|-------|-------|------|---------|
+| **Cache HIT** (Green) |Fast | Action Key → Query Action Cache → Download from CAS | ~200ms | ✅ Both in volume |
+| **Cache MISS** (Red) |Slow | Action Key → Query Action Cache → Compile → Upload to CAS | ~850ms | ✅ Stored in volume |
+
+
+#### CACHE HIT Path (Fast: ~200ms)
+
+```
+Bazel Client
+    ↓
+Computes action key (SHA256)
+    ↓
+Queries Action Cache at localhost:8085
+    ↓ (via gRPC)
+Remote Server: Action Cache
+    ↓
+✓ KEY FOUND → Returns CAS digests
+    ↓
+Remote Server: CAS Storage
+    ↓
+Downloads artifacts (1-4MB chunks)
+    ↓
+Bazel Client
+    ↓
+Links binary from cache (no compilation!)
+    ↓
+DONE (50-200ms total)
+```
+
+#### CACHE MISS Path (Slow: ~850ms)
+
+```
+Bazel Client
+    ↓
+Computes action key (SHA256)
+    ↓
+Queries Action Cache at localhost:8085
+    ↓ (via gRPC)
+Remote Server: Action Cache
+    ↓
+✗ KEY NOT FOUND → Returns "miss"
+    ↓
+Bazel Client (Local Machine)
+    ↓
+Compiles code locally (400-800ms)
+    ↓
+Packages build artifacts
+    ↓
+Uploads to Remote Server: CAS Storage
+    ↓
+Remote Server: Action Cache
+    ↓
+Creates mapping: action_key → [CAS_digests]
+    ↓
+DONE (850ms total)
+    ↓
+NEXT BUILD with same code → CACHE HIT!
 ```
 
 ---
 
-### The Complete Flow
+### The Two Paths
 
 ```mermaid
 graph TD
-    subgraph LOCAL ["LOCAL MACHINE"]
-        A["Bazel Client"] -->|Sources / Flags / Toolchain| B["STEP 1: Action Key"]
-        B -->|SHA256 Hash| C["a1b2c3d4..."]
-        G["CAS Download<br/>1-4MB chunks"] -->|Binary Ready<br/>50-200ms| J["CACHE HIT<br/>Link & Use"]
-        I["STEP 6: Compile Locally<br/>400-800ms"]
-        I -->|Link<br/>100ms| K["CACHE MISS<br/>Build Complete"]
-        K -->|Upload Artifacts| L["→ Remote"]
-    end
+    Start["🔍 Bazel Computes Action Key<br/>(SHA256 hash)"]
     
-    subgraph REMOTE ["REMOTE SERVER"]
-        D["STEP 2: Query Cache<br/>localhost:8085"] -->|gRPC| E["STEP 3: Server Lookup"]
-        E -->|Found?| F{{"STEP 4: HIT or MISS?"}}
-        F -->|HIT| G
-        F -->|MISS| I
-        AC["Action Cache<br/>key → digest"]
-        CAS["CAS Storage<br/>hash → bytes"]
-        VOL["Docker Volume<br/>/var/cache"]
-    end
+    Start --> Query["📤 Query Action Cache<br/>(gRPC to localhost:8085)"]
     
-    C -->|gRPC Query| D
-    L -->|Store in| CAS
-    CAS -->|Index in| AC
-    AC -->|Persist| VOL
-    VOL -->|Next Build| D
+    Query --> Decision{"Action Key<br/>Found?"}
     
-    style LOCAL fill:#e6f5ff,stroke:#0066cc,stroke-width:2px,color:#000
-    style REMOTE fill:#fff5e6,stroke:#ff9900,stroke-width:2px,color:#000
-    style A fill:#d4e8f7,stroke:#333,stroke-width:1px,color:#000
-    style B fill:#b3d9ff,stroke:#0066cc,stroke-width:2px,color:#000
-    style C fill:#f5f5f5,stroke:#333,stroke-width:1px,color:#333
-    style D fill:#ffe6cc,stroke:#cc8800,stroke-width:2px,color:#000
-    style E fill:#ffd9b3,stroke:#ff9900,stroke-width:1px,color:#000
-    style F fill:#fff4e6,stroke:#333,stroke-width:2px,color:#000
-    style G fill:#d4edda,stroke:#28a745,stroke-width:1px,color:#000
-    style I fill:#f8d7da,stroke:#dc3545,stroke-width:1px,color:#000
-    style J fill:#c3e6cb,stroke:#28a745,stroke-width:2px,color:#000
-    style K fill:#f5c6cb,stroke:#dc3545,stroke-width:2px,color:#000
-    style L fill:#f8d7da,stroke:#dc3545,stroke-width:1px,color:#000
-    style CAS fill:#ffd9b3,stroke:#ff9900,stroke-width:1px,color:#000
-    style AC fill:#ffd9b3,stroke:#ff9900,stroke-width:1px,color:#000
-    style VOL fill:#e6ffe6,stroke:#333,stroke-width:1px,color:#000
+    %% CACHE HIT PATH
+    Decision -->|YES| Hit1["✅ CACHE HIT<br/>Action Cache returns CAS digests"]
+    Hit1 --> Hit2["⬇️ Download from CAS<br/>(1-4MB chunks)"]
+    Hit2 --> Hit3["🔗 Link binary<br/>(no compilation!)"]
+    Hit3 --> Hit4["⚡ DONE<br/>200ms total"]
+    
+    %% CACHE MISS PATH
+    Decision -->|NO| Miss1["❌ CACHE MISS<br/>Key not found"]
+    Miss1 --> Miss2["💻 Compile locally<br/>(400-800ms)"]
+    Miss2 --> Miss3["📦 Package artifacts"]
+    Miss3 --> Miss4["⬆️ Upload to CAS<br/>(via gRPC)"]
+    Miss4 --> Miss5["📝 Update Action Cache<br/>(index key → digests)"]
+    Miss5 --> Miss6["🔄 DONE<br/>850ms total"]
+    Miss6 --> NextBuild["✨ Next build with same code<br/>→ CACHE HIT!"]
+    
+    style Start fill:#e1f5ff,stroke:#0277bd,stroke-width:2px,color:#000
+    style Query fill:#fff9c4,stroke:#f57f17,stroke-width:2px,color:#000
+    style Decision fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
+    
+    style Hit1 fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px,color:#000
+    style Hit2 fill:#a5d6a7,stroke:#1b5e20,stroke-width:1px,color:#000
+    style Hit3 fill:#a5d6a7,stroke:#1b5e20,stroke-width:1px,color:#000
+    style Hit4 fill:#81c784,stroke:#1b5e20,stroke-width:2px,color:#fff
+    
+    style Miss1 fill:#ffccbc,stroke:#d84315,stroke-width:2px,color:#000
+    style Miss2 fill:#ffab91,stroke:#bf360c,stroke-width:1px,color:#000
+    style Miss3 fill:#ffab91,stroke:#bf360c,stroke-width:1px,color:#000
+    style Miss4 fill:#ff8a65,stroke:#bf360c,stroke-width:1px,color:#000
+    style Miss5 fill:#ff8a65,stroke:#bf360c,stroke-width:1px,color:#000
+    style Miss6 fill:#ff7043,stroke:#bf360c,stroke-width:2px,color:#fff
+    style NextBuild fill:#fff9c4,stroke:#f57f17,stroke-width:2px,color:#000
 ```
 
 ---
@@ -545,7 +667,7 @@ You don't need special authentication or setup for local `bazel-remote`:
 config:remote-cache \
     --remote_cache=http://localhost:8085
 
-# RECOMMENDED CONFIG (production-ready):
+# RECOMMENDED CONFIG:
 config:remote-cache \
     --remote_cache=http://localhost:8085 \
     --remote_upload_local_results=true \
@@ -753,10 +875,8 @@ bazel-infra-lab/
 │   └── setup.sh                Initialize environment
 │
 ├── docs/                    Reference Documentation
-│   ├── best-practices.md       Production strategies
+│   ├── best-practices.md       
 │   ├── cache-explanation.md    Cache behavior reference
-│   ├── production-setup.md     Kubernetes deployment
-│   └── scaling.md              Team scaling guide
 │
 ├── .bazelrc                 Build configuration
 ├── BUILD                    Root Bazel file
@@ -969,10 +1089,8 @@ bash scripts/demonstrate-cache.sh metrics benchmark # Heavy benchmark
 - **bazel-remote GitHub**: https://github.com/buchgr/bazel-remote
 - **Remote Build Execution API**: https://github.com/bazelbuild/remote-apis
 - **Internal Reference Documents**:
-  - `docs/best-practices.md` - Production strategies
+  - `docs/best-practices.md`
   - `docs/cache-explanation.md` - Cache behavior reference
-  - `docs/production-setup.md` - Kubernetes deployment guide
-  - `docs/scaling.md` - Scaling for teams and growth
 
 ---
 

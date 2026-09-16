@@ -71,7 +71,7 @@ config:remote-linux-clang \
 # CI/CD Configuration (GitHub Actions, etc)
 # ============================================================================
 
-# Production CI/CD settings - maximum optimization
+# CI/CD settings - maximum optimization
 config:ci \
     --config=remote \
     --remote_header=x-buildbuddy-api-key=<API_KEY> \

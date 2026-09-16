@@ -200,15 +200,12 @@ docker-compose logs
 
 See docs/ for detailed guides on:
 - Local setup
-- Production deployment
 - Best practices
-- Scaling strategies
 
 ## Next Steps
 
 1. Read `docs/local-setup.md` for detailed configuration
 2. Read `docs/best-practices.md` for optimization tips
-3. Read `docs/production-setup.md` for deployment to production
 EOF
 
 log_info "Setup complete! ✓"
@@ -223,5 +220,4 @@ echo ""
 echo "Detailed guides:"
 echo "- Local setup: docs/local-setup.md"
 echo "- Best practices: docs/best-practices.md"
-echo "- Production deployment: docs/production-setup.md"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

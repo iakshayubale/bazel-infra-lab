@@ -173,8 +173,6 @@ ls -la docs/
 # Common docs:
 # - docs/local-setup.md       - Local development setup
 # - docs/best-practices.md    - Performance optimization
-# - docs/production-setup.md  - Kubernetes deployment
-# - docs/scaling.md           - Scaling strategies
 ```
 
 ## Bazel Configuration
@@ -386,8 +384,6 @@ When proposing new features:
 ├── docs/                        # Documentation
 │   ├── local-setup.md
 │   ├── best-practices.md
-│   ├── production-setup.md
-│   └── scaling.md
 │
 └── .github/
     └── workflows/
