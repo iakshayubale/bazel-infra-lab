@@ -40,7 +40,7 @@ STEP 5: Add setup (create /var/bazel-remote/cache directory for storing builds)
            ↓
 STEP 6: Add health check (verify container is working every 30 seconds)
            ↓
-STEP 7: Start the service (run cache server on port 8085)
+STEP 7: Start the service (run cache server on ports 9092 for gRPC, 8080 for HTTP)
 ```
 
 **The Dockerfile recipe location:** [infrastructure/docker/Dockerfile](../infrastructure/docker/Dockerfile)
@@ -105,7 +105,7 @@ The container will:
 | What You Want | Command |
 |---|---|
 | Start container | `cd infrastructure/docker && docker-compose up -d` |
-| Check if running | `curl http://localhost:8085/status` |
+| Check if running | `curl http://localhost:8080/status` |
 | View container logs | `docker-compose logs bazel-remote` |
 | Stop container | `docker-compose down` |
 | Restart container | `docker-compose restart` |
@@ -161,7 +161,9 @@ Verify it's running:
 curl http://localhost:8085/status
 ```
 
-The cache server will be available at `http://localhost:8085`
+The cache server will be available at:
+- gRPC endpoint: `grpc://localhost:9092` (for Bazel client)
+- HTTP endpoint: `http://localhost:8080` (for monitoring/status)
 
 ## Step 2: Configure Bazel for Remote Caching
 
@@ -174,7 +176,7 @@ cat .bazelrc | grep remote_cache
 Should show:
 ```
 config:remote-cache \
-    --remote_cache=http://localhost:8085 \
+    --remote_cache=grpc://localhost:9092 \
     --remote_upload_local_results=true
 ```
 
@@ -183,7 +185,7 @@ If you need to modify it, edit `.bazelrc`:
 ```bash
 # For local self-hosted bazel-remote:
 config:remote-cache \
-    --remote_cache=http://localhost:8085 \
+    --remote_cache=grpc://localhost:9092 \
     --remote_timeout=3600s \
     --remote_upload_local_results=true
 ```
@@ -198,10 +200,10 @@ bazel build --config=remote-cache //app:hello
 
 Expected time: 2-5 seconds (depends on machine)
 
-Verify cache server status:
+Verify cache server status (HTTP endpoint):
 
 ```bash
-curl http://localhost:8085/status | jq .
+curl http://localhost:8080/status | jq .
 ```
 
 Second build (same code, cache hit):

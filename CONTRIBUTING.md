@@ -208,7 +208,7 @@ cd infrastructure/docker && docker-compose down
 cd infrastructure/docker && docker-compose logs -f
 
 # Check status
-curl http://localhost:8085/status | jq .
+curl http://localhost:8080/status | jq .
 ```
 
 ### Resetting Cache

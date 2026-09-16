@@ -63,7 +63,7 @@
 - [Troubleshooting](#troubleshooting)
   - [Cache Server Not Responding](#cache-server-not-responding)
   - [Build Still Compiles After Cache Upload](#build-still-compiles-after-cache-upload)
-  - [Connection Refused to localhost:8085](#connection-refused-to-localhost8085)
+  - [Connection Refused to Ports 9092 or 8080](#connection-refused-to-ports-9092-or-8080)
 - [Future Enhancements \& Scope](#future-enhancements--scope)
 - [Tested \& Verified](#tested--verified)
 - [Disclaimer: POC Limitations](#disclaimer-poc-limitations)
@@ -180,7 +180,7 @@ cd infrastructure/docker
 docker-compose up -d
 ```
 
-**Expected Result**: `bazel-remote` cache server available at `http://localhost:8085`
+**Expected Result**: `bazel-remote` cache server available at gRPC endpoint `grpc://localhost:9092` with HTTP monitoring at `http://localhost:8080`
 
 ---
 
@@ -194,7 +194,7 @@ cat .bazelrc
 
 **Should contain**:
 ```ini
-common --remote_cache=http://localhost:8085
+common --remote_cache=grpc://localhost:9092
 common --remote_upload_local_results=true
 ```
 
@@ -218,8 +218,8 @@ bazel clean && bazel build //app:hello
 # Run interactive demonstration suite
 bash scripts/demonstrate-cache.sh metrics benchmark
 
-# View real-time cache statistics
-curl -s http://localhost:8085/status | jq .
+# View real-time cache statistics (HTTP endpoint)
+curl -s http://localhost:8080/status | jq .
 ```
 
 ---
@@ -232,7 +232,7 @@ When you start the cache server, here's what you get:
 # In Docker:
 Container:  bazel-remote-server
 Image:      docker-bazel-remote:latest
-Port:       8085 (gRPC + HTTP)
+Ports:      9092 (gRPC), 8080 (HTTP/REST monitoring)
 Storage:    /var/bazel-remote/cache (persistent volume)
 Network:    bazel-remote-network
 ```
@@ -265,7 +265,7 @@ graph TB
     end
     
     subgraph NETWORK["<span style='color:#000;'>NETWORK</span>"]
-        GRPC["gRPC Connection<br/>localhost:8085"]
+        GRPC["gRPC Connection<br/>grpc://localhost:9092"]
     end
     
     subgraph DOCKER["<span style='color:#000;'>DOCKER CONTAINER: bazel-remote-server</span>"]
@@ -477,7 +477,7 @@ config:remote-cache \
 
 | Flag | Purpose | What Bazel Does |
 | :--- | :--- | :--- |
-| `--remote_cache=http://localhost:8085` | **WHERE** to send requests | Connects to Docker container on port 8085 |
+| `--remote_cache=grpc://localhost:9092` | **WHERE** to send requests | Connects to Docker container gRPC endpoint on port 9092 |
 | `--remote_upload_local_results=true` | **SHARE** results with team | After building, upload to cache for others |
 | `--remote_timeout=3600s` | **HOW LONG** to wait | If server takes >1 hour, timeout (prevents hanging) |
 
@@ -1011,14 +1011,18 @@ docker-compose -f infrastructure/docker/docker-compose.yml up -d
 - Toolchain/flags changed -> action key differs -> cache miss
 - Use `bazel clean` before second build to test cache hit
 
-### Connection Refused to localhost:8085
+### Connection Refused to Ports 9092 or 8080
 
 ```bash
-# Verify cache server status
-curl http://localhost:8085/status
+# Verify gRPC endpoint (port 9092)
+grpcurl -plaintext localhost:9092 list
+
+# Verify HTTP monitoring endpoint (port 8080)
+curl http://localhost:8080/status
 
 # Check firewall or port binding
-sudo lsof -i :8085
+sudo lsof -i :9092 # gRPC
+sudo lsof -i :8080 # HTTP
 ```
 
 ---

@@ -9,14 +9,16 @@ services:
       dockerfile: Dockerfile
     container_name: bazel-remote-server
     ports:
-      # Cache server API (gRPC + HTTP)
-      - "8085:8085"
+      # HTTP/REST API for monitoring and status checks
+      - "8080:8080"
+      # gRPC API for Bazel client communication (bazel-remote protocol)
+      - "9092:9092"
     volumes:
       # Persist bazel-remote cache across container restarts
       # This directory stores all CAS artifacts and action cache entries
       - bazel-remote-cache:/var/bazel-remote/cache
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8085/status"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/status"]
       interval: 30s
       timeout: 10s
       retries: 3

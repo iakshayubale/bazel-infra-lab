@@ -71,11 +71,11 @@ RUN mkdir -p /var/bazel-remote/cache && chmod 777 /var/bazel-remote/cache
 EXPOSE 8085
 
 # Health check configuration
-# Periodically check if bazel-remote is alive
-# curl http://localhost:8085/status = Returns JSON with cache stats
+# Periodically check if bazel-remote is alive using HTTP endpoint
+# curl http://localhost:8080/status = Returns JSON with cache stats (HTTP port)
 # If this fails 3 times in a row → Docker marks container as unhealthy
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=40s \
-    CMD curl -f http://localhost:8085/status || exit 1
+    CMD curl -f http://localhost:8080/status || exit 1
 
 # ============================================================================
 # START BAZEL-REMOTE CACHE SERVER
@@ -83,12 +83,15 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=40s \
 # This command runs when the container starts
 # Arguments:
 #   --dir=/var/bazel-remote/cache = Directory to store all cached artifacts
-#   --http_address=0.0.0.0:8085 = Listen on all network interfaces, port 8085
+#   --http_address=0.0.0.0:8080 = HTTP/REST endpoint for monitoring (/status, /health)
+#   --grpc_address=0.0.0.0:9092 = gRPC endpoint for Bazel client communication
 #   --max_size=10 = Maximum cache size: 10 GB
 # 
 # When you run: docker-compose up -d
 # → Docker starts this container
 # → Runs this CMD
-# → bazel-remote server starts and listens on http://localhost:8085
+# → bazel-remote server starts on:
+#    • HTTP: http://localhost:8080 (REST API, monitoring)
+#    • gRPC: grpc://localhost:9092 (Bazel client communication)
 # → Ready to cache bazel build artifacts!
-CMD ["bazel-remote", "--dir=/var/bazel-remote/cache", "--http_address=0.0.0.0:8085", "--max_size=10"]
+CMD ["bazel-remote", "--dir=/var/bazel-remote/cache", "--http_address=0.0.0.0:8080", "--grpc_address=0.0.0.0:9092", "--max_size=10"]
