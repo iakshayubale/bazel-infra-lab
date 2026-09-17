@@ -63,7 +63,7 @@ CACHE_RUNNING=false
 if curl -s http://localhost:8080/status >/dev/null 2>&1; then
     CACHE_RUNNING=true
     CACHE_DATA=$(curl -s http://localhost:8080/status 2>/dev/null)
-    printf "%s✓ bazel-remote cache server is RUNNING on localhost:8080 (gRPC: 9092)%s\n" "$GREEN" "$NC"
+    printf "%s✓ bazel-remote cache server is RUNNING (HTTP: localhost:8080, gRPC: localhost:9092)%s\n" "$GREEN" "$NC"
     
     log_detail "Cache Utilization:"
     if command -v jq &> /dev/null; then
