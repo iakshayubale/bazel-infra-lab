@@ -18,10 +18,12 @@ bazel clean
 - **Keeps**: Remote cache server intact
 - **Next build**: Downloads from remote cache if available
 
-### Remote Cache (on server at localhost:8085)
+### Remote Cache (on server at localhost:9092 gRPC, 8080 HTTP)
 - **Persists**: Even after `bazel clean`
 - **Shared**: Accessible across multiple builds and developers
 - **Cleared with**: `./scripts/demonstrate-cache.sh clear-remote`
+- **gRPC Endpoint**: `grpc://localhost:9092` (Bazel client communication)
+- **HTTP Endpoint**: `http://localhost:8080` (Monitoring, status checks)
 
 ## Cache Hit vs Cache Miss
 

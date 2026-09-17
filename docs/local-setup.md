@@ -1,6 +1,16 @@
 # Setup Guide: Local Development with Remote Caching
 
 > **Status**: This guide is tested and verified as part of the POC. Follow these steps to set up remote caching on your local machine using Docker.
+>
+> **Quick Start**: 
+> ```bash
+> cd infrastructure/docker && docker-compose up -d
+> curl http://localhost:8080/status | jq .    # Verify running
+> bazel build --config=remote-cache //app:hello  # Build with cache
+> ```
+> **Endpoints**: 
+> - gRPC (Bazel): `grpc://localhost:9092`
+> - HTTP (Monitoring): `http://localhost:8080`
 
 This guide walks you through setting up Bazel with remote caching for local development using **bazel-remote** (self-hosted, open-source).
 
@@ -65,7 +75,7 @@ This will:
 #### **Step B: Verify It's Running**
 
 ```bash
-curl http://localhost:8085/status
+curl http://localhost:8080/status
 ```
 
 You should see:
@@ -134,7 +144,8 @@ Your Machine
 │  │ Docker Container                             │  │
 │  │                                              │  │
 │  │ Service Name: bazel-remote-server            │  │
-│  │ Listening on: http://localhost:8085          │  │
+│  │ gRPC: grpc://localhost:9092 (Bazel comms)    │  │
+│  │ HTTP: http://localhost:8080 (Monitoring)    │  │
 │  │ Storage: /var/bazel-remote/cache (10GB max)  │  │
 │  │                                              │  │
 │  │ ┌──────────────────────────────────────────┐ │  │
@@ -158,7 +169,7 @@ docker-compose up -d
 Verify it's running:
 
 ```bash
-curl http://localhost:8085/status
+curl http://localhost:8080/status
 ```
 
 The cache server will be available at:
@@ -266,7 +277,7 @@ docker-compose restart
 
 ### Cache misses on every build
 
-1. Verify `.bazelrc` correctly points to `http://localhost:8085`
+1. Verify `.bazelrc` correctly points to `grpc://localhost:9092`
 2. Check `--remote_upload_local_results=true` is set
 3. Ensure `.bazelrc` settings are consistent across rebuilds
 

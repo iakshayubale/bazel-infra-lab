@@ -352,7 +352,7 @@ Bazel Client
     ↓
 Computes action key (SHA256)
     ↓
-Queries Action Cache at localhost:8085
+Queries Action Cache at grpc://localhost:9092
     ↓ (via gRPC)
 Remote Server: Action Cache
     ↓
@@ -376,7 +376,7 @@ Bazel Client
     ↓
 Computes action key (SHA256)
     ↓
-Queries Action Cache at localhost:8085
+Queries Action Cache at grpc://localhost:9092
     ↓ (via gRPC)
 Remote Server: Action Cache
     ↓
@@ -407,7 +407,7 @@ NEXT BUILD with same code → CACHE HIT!
 graph TD
     Start["🔍 Bazel Computes Action Key<br/>(SHA256 hash)"]
     
-    Start --> Query["📤 Query Action Cache<br/>(gRPC to localhost:8085)"]
+    Start --> Query["📤 Query Action Cache<br/>(gRPC to grpc://localhost:9092)"]
     
     Query --> Decision{"Action Key<br/>Found?"}
     
@@ -470,7 +470,7 @@ When you run `bazel build`, two cache layers come into play. Understanding the d
 ```bash
 # In .bazelrc, you specify:
 config:remote-cache \
-    --remote_cache=http://localhost:8085 \
+    --remote_cache=grpc://localhost:9092 \
     --remote_upload_local_results=true \
     --remote_timeout=3600s
 ```
@@ -494,7 +494,7 @@ Bazel **automatically** executes this workflow:
 STEP 1: Parse Configuration
         ↓
         Bazel reads .bazelrc
-        Sees: --remote_cache=http://localhost:8085
+        Sees: --remote_cache=grpc://localhost:9092
         Prepares for gRPC communication
         
 STEP 2: Compute Action Key (SHA256 Hash)
@@ -510,7 +510,7 @@ STEP 3: Create gRPC Request
         
 STEP 4: Send to Remote Cache via gRPC
         ↓
-        Connects to http://localhost:8085 (port 8085)
+        Connects to grpc://localhost:9092 (port 9092)
         Uses gRPC protocol (Google's Remote Procedure Call)
         Sends encrypted request over HTTP/2
         ↓
@@ -538,12 +538,12 @@ STEP 6: Build Complete
 gRPC is **Google's high-performance Remote Procedure Call framework**. Think of it as a very fast, efficient way for two programs to talk to each other:
 
 ```
-Traditional HTTP Request:
+Traditional HTTP/1.1 Request (what we DON'T use):
   GET /api/cache/a1b2c3d4... HTTP/1.1
-  Host: localhost:8085
-  [large overhead]
+  Host: localhost:8080
+  [text-based, large overhead, inefficient]
 
-gRPC Request (What Bazel Uses):
+gRPC Request (what Bazel ACTUALLY uses on port 9092):
   ContentAddressableStorage.GetActionResult(action_id: a1b2c3d4...)
   [binary format, very efficient]
   [sent over HTTP/2, multiplexed streams]
@@ -563,15 +563,15 @@ gRPC Request (What Bazel Uses):
 # Terminal 1: Start Docker cache server
 $ cd infrastructure/docker
 $ docker-compose up -d
-bazel-remote-server started on port 8085
+bazel-remote-server started on ports 8080 (HTTP) and 9092 (gRPC)
 
 # Terminal 2: Build with caching
 $ bazel build --config=remote-cache //app:hello
 
 [Bazel internally]:
-  1. Reads .bazelrc → sees --remote_cache=http://localhost:8085
+  1. Reads .bazelrc → sees --remote_cache=grpc://localhost:9092
   2. Computes action key for hello binary
-  3. Sends gRPC query to localhost:8085
+  3. Sends gRPC query to grpc://localhost:9092
   4. Server responds: "Not cached, you must build"
   5. Compiles locally
   6. Uploads to cache via gRPC
@@ -583,7 +583,7 @@ $ bazel build --config=remote-cache //app:hello
 [Bazel internally]:
   1. Reads .bazelrc (same config)
   2. Computes action key (same hash, because code didn't change)
-  3. Sends gRPC query to localhost:8085
+  3. Sends gRPC query to grpc://localhost:9092
   4. Server responds: "Found it! Here are the files"
   5. Downloads artifacts via gRPC
   6. Links binary from cache
@@ -602,18 +602,18 @@ Your Local Machine
 │  │ Bazel Client Process                                 │   │
 │  │                                                      │   │
 │  │ 1. Reads .bazelrc configuration                      │   │
-│  │ 2. Parses: --remote_cache=http://localhost:8085      │   │
+│  │ 2. Parses: --remote_cache=grpc://localhost:9092      │   │
 │  │ 3. Computes action key (SHA256 hash)                 │   │
 │  │ 4. Creates gRPC message                              │   │
-│  │ 5. Sends to port 8085 via gRPC                       │   │
+│  │ 5. Sends to port 9092 via gRPC                       │   │
 │  │                                                      │   │
 │  │         ↓↓↓ gRPC Request ↓↓↓                         │   │ 
 │  │    (binary, efficient, multiplexed)                  │   │ 
 │  │                                                      │   │
 │  │  ┌─────────────────────────────────────────────┐     │   │
 │  │  │ Docker Container: bazel-remote-server       │     │   │
-│  │  │ Listening on: http://localhost:8085         │     │   │
-│  │  │                                             │     │   │
+│  │  │ Listening on: grpc://localhost:9092         │     │   │
+│  │  │ (HTTP monitoring: http://localhost:8080)    │     │   │
 │  │  │ Receives gRPC request:                      │     │   │
 │  │  │ "Do you have action: a1b2c3d4...?"          │     │   │
 │  │  │                                             │     │   │
@@ -665,11 +665,11 @@ You don't need special authentication or setup for local `bazel-remote`:
 ```bash
 # MINIMAL CONFIG (what you need):
 config:remote-cache \
-    --remote_cache=http://localhost:8085
+    --remote_cache=grpc://localhost:9092
 
 # RECOMMENDED CONFIG:
 config:remote-cache \
-    --remote_cache=http://localhost:8085 \
+    --remote_cache=grpc://localhost:9092 \
     --remote_upload_local_results=true \
     --remote_timeout=3600s
 
@@ -712,7 +712,7 @@ You just run `bazel build`! 🎉
 <br>
 
 **Location**: Remote Server (`bazel-remote` container)
-- **Protocol**: gRPC over port `8085`
+- **Protocol**: gRPC over port `9092`
 - **Bazel sends**: `GetActionResult(action_key)`
 - **Time**: `< 10ms` (network round trip)
 
@@ -907,9 +907,16 @@ cat .bazelrc
 
 **Expected Configuration**:
 ```ini
-common --remote_cache=http://localhost:8085
+common --remote_cache=grpc://localhost:9092
 common --remote_upload_local_results=true
 ```
+
+**Verify the cache server is running**:
+```bash
+curl http://localhost:8080/status | jq .
+```
+
+The gRPC endpoint runs on port 9092, and the HTTP monitoring endpoint runs on port 8080.
 
 ### Docker Setup
 
@@ -930,8 +937,12 @@ docker-compose up -d
 
 **Verify it's running**:
 ```bash
-curl http://localhost:8085/status | jq .
+curl http://localhost:8080/status | jq .
 ```
+
+The bazel-remote server listens on:
+- **gRPC**: `grpc://localhost:9092` (for Bazel client communication)
+- **HTTP**: `http://localhost:8080` (for monitoring, status checks)
 
 **To stop**:
 ```bash
@@ -954,7 +965,7 @@ docker-compose down
 Query status directly from the cache server:
 
 ```bash
-curl -s http://localhost:8085/status | jq .
+curl -s http://localhost:8080/status | jq .
 ```
 
 Shows:
@@ -1072,7 +1083,7 @@ This is a **Proof-of-Concept** designed to educate on how Bazel remote caching w
 cd infrastructure/docker && docker-compose up -d   # Start cache server
 cd infrastructure/docker && docker-compose down     # Stop cache server
 cd infrastructure/docker && docker-compose logs -f   # View logs
-curl http://localhost:8085/status | jq .            # Check status
+curl http://localhost:8080/status | jq .            # Check status (HTTP monitoring)
 
 # --- Building ---
 bazel build //... --config=remote-cache              # Build all targets

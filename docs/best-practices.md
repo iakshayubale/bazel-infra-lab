@@ -69,28 +69,27 @@ bazel build --stamp //app:app
 
 ## 2. Optimize Build Configuration
 
-### Use `.bazelrc` Profiles
+### Configure Remote Cache Endpoints
+
+For this POC, use bazel-remote with these endpoints:
 
 ```bash
 # .bazelrc
 
-# Development: fast feedback
-config:dev \
-    --jobs=auto \
-    --keep_state_file \
-    --noremote_upload_local_results
-
-# CI: maximum caching
-config:ci \
-    --config=remote \
-    --jobs=200 \
-    --remote_upload_local_results
-
-# Performance testing
-config:profile \
-    --profile=/tmp/profile.gz \
-    --explain=explain.txt
+config:remote-cache \
+    --remote_cache=grpc://localhost:9092 \
+    --remote_timeout=3600s \
+    --remote_upload_local_results=true
 ```
+
+**Why these values?**
+- `grpc://` protocol: Binary, efficient, optimized for Bazel
+- Port `9092`: bazel-remote's gRPC endpoint
+- Port `8080`: HTTP monitoring endpoint (status checks, not used by Bazel)
+- `remote_timeout=3600s`: Long timeout for large builds
+- `upload_local_results=true`: Contributes results to cache for team sharing
+
+**Important**: Always use `grpc://localhost:9092` for bazel-remote, never `http://`
 
 ### Parallel Builds
 
@@ -137,15 +136,15 @@ bazel build //...
 Deploy bazel-remote as a shared cache for your team:
 
 ```bash
-# Local development
+# Local development (with bazel-remote)
 config:dev \
-    --remote_cache=http://localhost:8085 \
+    --remote_cache=grpc://localhost:9092 \
     --remote_timeout=3600s \
     --remote_upload_local_results=true
 
-# Shared team cache
+# Shared team cache (example with cloud cache)
 config:team \
-    --remote_cache=https://bazel-cache.example.com \
+    --remote_cache=grpc://bazel-cache.example.com:9092 \
     --remote_timeout=3600s \
     --remote_upload_local_results=true
 ```
@@ -176,8 +175,10 @@ Clear caches when needed:
 # Local cache only
 bazel clean
 
-# Remote cache (via server API)
-curl -X DELETE http://localhost:8085/cache/clear
+# Remote cache (via Docker)
+cd infrastructure/docker && docker-compose down
+docker volume rm docker_bazel-remote-cache
+docker-compose up -d
 ```
 
 ## 5. Testing Strategy
@@ -225,14 +226,14 @@ bazel analyze-profile /tmp/profile.gz
 
 ### Track Cache Metrics
 
-Monitor cache effectiveness:
+Monitor cache effectiveness (using HTTP monitoring endpoint on port 8080):
 
 ```bash
 # Check cache server status
-curl http://localhost:8085/status | jq .
+curl http://localhost:8080/status | jq .
 
 # View metrics
-curl http://localhost:8085/metrics
+curl http://localhost:8080/metrics
 
 # Key metrics to track:
 # - Cache hit rate (target: >70%)
@@ -326,11 +327,11 @@ bazel-remote \
 
 ### Monitor Build Performance
 
-Track metrics to optimize spending:
+Track metrics to optimize spending (using HTTP monitoring endpoint on port 8080):
 
 ```bash
 # Check cache hit rate
-curl http://localhost:8085/metrics | grep cache_hits
+curl http://localhost:8080/metrics | grep cache_hits
 
 # Build time trends (use --profile flag)
 bazel build --profile=/tmp/profile.gz //...
@@ -354,7 +355,7 @@ Protect your cache server:
 ```bash
 # .bazelrc - restrict to internal networks only
 config:prod \
-    --remote_cache=https://bazel-cache.internal:8085 \
+    --remote_cache=grpcs://bazel-cache.internal:9092 \
     --remote_timeout=3600s
 ```
 

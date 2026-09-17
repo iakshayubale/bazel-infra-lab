@@ -1,5 +1,15 @@
 # Bazel Remote Build Configuration Example
-# Copy this file to .bazelrc and customize with your BuildBuddy instance
+# Copy this file to .bazelrc and customize for your setup
+# This example is configured for bazel-remote (self-hosted, local cache server)
+#
+# For bazel-remote setup:
+#   1. Start cache server: cd infrastructure/docker && docker-compose up -d
+#   2. Copy this file: cp .bazelrc.example .bazelrc
+#   3. Build with cache: bazel build --config=remote-cache //app:hello
+#
+# For other cache servers (BuildBuddy, EngFlow, etc.), update:
+#   - --remote_cache URL and credentials
+#   - Remove bazel-remote-specific settings
 
 # ============================================================================
 # Common settings (always applied)
@@ -30,30 +40,23 @@ common --show_progress_rate_limit=0.2
 config:local --noenable_bzlmod
 
 # ============================================================================
-# Remote Caching Configuration
+# Remote Caching Configuration (bazel-remote)
 # ============================================================================
+# For bazel-remote: Uses gRPC on port 9092 for cache communication
+# HTTP monitoring: http://localhost:8080
+#
+# To use with this POC:
+#   Start cache server: cd infrastructure/docker && docker-compose up -d
 
 config:remote-cache \
-    --remote_cache=http://localhost:8085 \
-    --remote_header=x-buildbuddy-api-key=demo-api-key \
+    --remote_cache=grpc://localhost:9092 \
     --remote_timeout=3600s \
     --remote_upload_local_results=true \
     --build_metadata=REPO_URL=https://github.com/example/repo \
     --build_metadata=COMMIT_SHA=local-build
 
-# ============================================================================
-# Remote Execution Configuration (Full Remote Build)
-# ============================================================================
-
-config:remote \
-    --config=remote-cache \
-    --remote_executor=http://localhost:8085 \
-    --execution_timeout=3600s \
-    --remote_instance_name=default_instance
-
-# ============================================================================
-# Platform-Specific Remote Execution
-# ============================================================================
+# Platform-Specific Remote Execution (OPTIONAL)
+# Only applies if you're using a remote executor (not needed for bazel-remote)
 
 # Linux with gcc
 config:remote-linux-gcc \
