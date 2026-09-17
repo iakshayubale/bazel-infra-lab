@@ -8,7 +8,6 @@ bazel-*/  # Root directory symlinks created by Bazel
 
 # Bazel cache
 .bazel-cache/
-.bazelrc
 .bazelrc.local
 .bazelrc.ci
 

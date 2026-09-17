@@ -1,50 +1,36 @@
 # Quick Start Guide
 
-## Start BuildBuddy
+## Start bazel-remote Cache Server
 
 ```bash
 cd infrastructure/docker
 docker-compose up -d
+curl http://localhost:8080/status | jq .
 ```
-
-Visit dashboard: http://localhost:8086
 
 ## Build with Remote Caching
 
 ```bash
 # First build (populates cache)
-bazel build --config=remote-cache //app:hello
+bazel build //app:hello --config=remote-cache
 
 # Second build (instant from cache)
-bazel build --config=remote-cache //app:hello
+bazel build //app:hello --config=remote-cache
 ```
 
-## Run Tests
+## Or use the demonstration script (easier!)
 
 ```bash
-bazel test --config=remote-cache //...
+./scripts/demonstrate-cache.sh
 ```
 
-## View Build Metrics
+This script handles all the cache flags and shows cache hits/misses in real time.
 
-- Dashboard: http://localhost:8086
-- Check "Invocations" tab for build history
-- Check cache hit rates
-
-## Full Remote Execution
-
-For distributed builds (requires multiple executor nodes):
+## View Cache Metrics
 
 ```bash
-bazel build --config=remote //app:hello
-```
-
-## Troubleshooting
-
-BuildBuddy not responding?
-```bash
-docker-compose ps
-docker-compose logs
+curl http://localhost:8080/status | jq .
+./scripts/metrics.sh
 ```
 
 See docs/ for detailed guides on:

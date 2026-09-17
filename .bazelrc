@@ -1,0 +1,37 @@
+# Bazel Remote Build Configuration for Bazel 9.2.0+
+# 
+# Uses "build:" prefix for named configurations.
+# Example usage: bazel build //app:hello --config=remote-cache
+
+# Common settings (always applied)
+common --strict_java_deps=off
+common --strict_proto_deps=off
+common --cxxopt=-std=c++17
+common --cxxopt=-fPIC
+common --color=yes
+common --show_progress_rate_limit=0.2
+
+# ============================================================================
+# Remote Caching Configuration (bazel-remote)
+# ============================================================================
+# Usage: bazel build //app:hello --config=remote-cache
+
+build:remote-cache --remote_cache=grpc://localhost:9092
+build:remote-cache --remote_timeout=3600s
+build:remote-cache --remote_upload_local_results=true
+build:remote-cache --build_metadata=REPO_URL=https://github.com/example/repo
+build:remote-cache --build_metadata=COMMIT_SHA=local-build
+
+# ============================================================================
+# Local Configuration (no caching)
+# ============================================================================
+# Usage: bazel build //app:hello --config=local
+
+build:local --noenable_bzlmod
+
+# ============================================================================
+# Load local overrides
+# ============================================================================
+
+try-import .bazelrc.local
+try-import .bazelrc.ci
