@@ -1,9 +1,17 @@
 #!/bin/bash
 set -e
 
-# Cache server configuration
-CACHE_SERVER="localhost:8080"  # HTTP/REST endpoint for status checks
-GRPC_ENDPOINT="grpc://localhost:9092"  # gRPC endpoint for Bazel cache communication
+# Detect if running in Docker container
+if [ -f /.dockerenv ]; then
+    # Inside Docker - use service name for inter-container communication
+    CACHE_SERVER="bazel-remote:8080"  # Service name on Docker network
+    GRPC_ENDPOINT="grpc://bazel-remote:9092"
+else
+    # On host machine - use localhost
+    CACHE_SERVER="localhost:8080"
+    GRPC_ENDPOINT="grpc://localhost:9092"
+fi
+
 BUILD_TARGET="//app:hello"
 
 # Color setup for terminal output
@@ -163,32 +171,50 @@ if [ "$SHOW_METRICS" = true ]; then
     echo ""
     bash "$PROJECT_ROOT/scripts/metrics.sh"
     echo ""
-    printf "%s┌─ 🎬Cache Demonstration ────────────────────────────────────┐%s\n" "$CYAN" "$NC"
+    printf "%s┌─ 🎬Cache Demonstration ────────────────────────────────────┐%s\n" "$CYAN" "$RESET"
     echo "    Now starting cache demonstration..."
-    printf "%s└────────────────────────────────────────────────────────────┘%s\n" "$CYAN" "$NC"
+    printf "%s└────────────────────────────────────────────────────────────┘%s\n" "$CYAN" "$RESET"
     echo ""
 fi
 
 # Clear remote cache if requested
 if [ "$CLEAR_REMOTE" = true ]; then
     echo "🧹 Clearing remote cache..."
-    DOCKER_DIR="infrastructure/docker"
-    if [ -d "$DOCKER_DIR" ]; then
-        cd "$DOCKER_DIR" 2>/dev/null
-        echo "   Stopping cache server..."
-        docker-compose down > /dev/null 2>&1 || true
-        echo "   Removing cache volume..."
-        docker volume rm docker_bazel-remote-cache > /dev/null 2>&1 || true
-        echo "   Restarting cache server..."
-        docker-compose up -d > /dev/null 2>&1
-        sleep 2  # Give cache server time to start
-        echo "✅ Remote cache cleared and restarted"
+    
+    if [ -f /.dockerenv ]; then
+        # Running inside Docker - provide helpful message
+        echo "   ℹ️  Running inside Docker container"
+        echo "   Note: Cache is shared with other dev containers"
+        echo "   To clear cache, run from HOST machine:"
         echo ""
-        cd - > /dev/null 2>&1
+        echo "   cd infrastructure/docker"
+        echo "   docker-compose -f docker-compose.bazel-remote-server.yml down"
+        echo "   docker volume rm infrastructure-docker_bazel-remote-cache"
+        echo "   docker-compose -f docker-compose.bazel-remote-server.yml up -d"
+        echo ""
+        echo "   ⏭️  Proceeding with existing cache..."
+        echo ""
+    else
+        # Running on host - clear the cache directly
+        DOCKER_DIR="infrastructure/docker"
+        if [ -d "$DOCKER_DIR" ]; then
+            cd "$DOCKER_DIR" 2>/dev/null
+            echo "   Stopping cache server..."
+            docker-compose -f docker-compose.bazel-remote-server.yml down > /dev/null 2>&1 || true
+            echo "   Removing cache volume..."
+            # Volume name is prefixed with the compose project name (docker_)
+            docker volume rm docker_bazel-remote-cache > /dev/null 2>&1 || true
+            echo "   Restarting cache server..."
+            docker-compose -f docker-compose.bazel-remote-server.yml up -d > /dev/null 2>&1
+            sleep 2  # Give cache server time to start
+            echo "✅ Remote cache cleared and restarted"
+            echo ""
+            cd - > /dev/null 2>&1
+        fi
     fi
 fi
 
-printf "%s┌─ 🎬 Remote Cache Demonstration ──────────────────────────────┐%s\n" "$CYAN" "$NC"
+printf "%s┌─ 🎬 Remote Cache Demonstration ──────────────────────────────┐%s\n" "$CYAN" "$RESET"
 
 # Select build target
 if [ "$USE_BENCHMARK" = true ]; then
@@ -213,28 +239,32 @@ echo "    will be recompiled (cache won't help those). For best results,"
 echo "    don't modify source code between builds."
 echo ""
 log_detail "Checking cache server..."
-if ! curl -s http://localhost:8080/status > /dev/null 2>&1; then
+if ! curl -s http://$CACHE_SERVER/status > /dev/null 2>&1; then
     echo "    ❌ Cache server not running. Start it with:"
-    echo "    cd infrastructure/docker && docker-compose up -d"
+    if [ -f /.dockerenv ]; then
+        echo "    (Running in Docker - ensure bazel-remote-server container is running)"
+    else
+        echo "    cd infrastructure/docker && docker-compose -f docker-compose.bazel-remote-server.yml up -d"
+    fi
     exit 1
 fi
-echo "    ✅ Cache server is healthy (HTTP on localhost:8080, gRPC on localhost:9092)"
-printf "%s└────────────────────────────────────────────────────────────┘%s\n" "$CYAN" "$NC"
+echo "    ✅ Cache server is healthy (HTTP on $CACHE_SERVER, gRPC on $GRPC_ENDPOINT)"
+printf "%s└────────────────────────────────────────────────────────────┘%s\n" "$CYAN" "$RESET"
 echo ""
 
 # Remote cache flags (use gRPC endpoint for Bazel communication)
-CACHE_FLAGS="--remote_cache=grpc://localhost:9092 --remote_upload_local_results=true"
+CACHE_FLAGS="--remote_cache=$GRPC_ENDPOINT --remote_upload_local_results=true"
 
-printf "\n%s┌─ 🎬 CACHE DEMONSTRATION: Real-Time Execution Logging ──────┐%s\n" "$CYAN" "$NC"
+printf "\n%s┌─ 🎬 CACHE DEMONSTRATION: Real-Time Execution Logging ──────┐%s\n" "$CYAN" "$RESET"
 log_detail "How this works:"
 echo "    • First build: What gets compiled and uploaded to cache"
 echo "    • Second build: What gets downloaded from cache"
 echo ""
 log_detail "Technical details:"
 echo "    See README.md > 'How Remote Cache Works' for step-by-step explanations"
-printf "%s└────────────────────────────────────────────────────────────┘%s\n" "$CYAN" "$NC"
+printf "%s└────────────────────────────────────────────────────────────┘%s\n" "$CYAN" "$RESET"
 echo ""
-printf "%s┌─ 📦 STEP 1: First Build (Cache Miss Expected) ──────────────┐%s\n" "$CYAN" "$NC"
+printf "%s┌─ 📦 STEP 1: First Build (Cache Miss Expected) ──────────────┐%s\n" "$CYAN" "$RESET"
 log_detail "Building with remote cache enabled"
 echo "    Compiling source files and uploading to cache..."
 echo ""
@@ -290,11 +320,11 @@ echo ""
 echo "✅ First build completed in ${FIRST_BUILD_TIME}ms"
 echo "    → All artifacts stored in remote cache"
 echo "    → Action Cache now contains: {action_key → [output_files]}"
-printf "%s└────────────────────────────────────────────────────────────┘%s\n" "$CYAN" "$NC"
+printf "%s└────────────────────────────────────────────────────────────┘%s\n" "$CYAN" "$RESET"
 echo ""
 rm -f "$FIRST_BUILD_OUTPUT"
 
-printf "%s┌─ 📥 STEP 2: Second Build (Cache Hit Expected) ──────────────┐%s\n" "$CYAN" "$NC"
+printf "%s┌─ 📥 STEP 2: Second Build (Cache Hit Expected) ──────────────┐%s\n" "$CYAN" "$RESET"
 log_detail "Building again (same source code)"
 echo "    → Downloading from cache instead of recompiling..."
 echo ""
@@ -392,7 +422,7 @@ fi
 echo ""
 
 log_detail "Action Cache Lookup Details"
-CACHE_STATUS=$(curl -s "http://localhost:8080/status" 2>/dev/null)
+CACHE_STATUS=$(curl -s "http://$CACHE_SERVER/status" 2>/dev/null)
 if [ -n "$CACHE_STATUS" ]; then
     NUM_FILES=$(echo "$CACHE_STATUS" | jq -r '.NumFiles // 0' 2>/dev/null)
     CACHE_SIZE=$(echo "$CACHE_STATUS" | jq -r '.CurrSize // 0' 2>/dev/null)
@@ -411,12 +441,12 @@ echo ""
 echo "✅ Second build completed in ${SECOND_BUILD_TIME}ms"
 echo "    → Artifacts downloaded from CAS"
 echo "    → No recompilation needed"
-printf "%s└────────────────────────────────────────────────────────────┘%s\n" "$CYAN" "$NC"
+printf "%s└────────────────────────────────────────────────────────────┘%s\n" "$CYAN" "$RESET"
 echo ""
 rm -f "$SECOND_BUILD_OUTPUT"
 
-printf "%s┌─ 📊 STEP 3: Remote Cache Statistics ───────────────────────┐%s\n" "$CYAN" "$NC"
-FINAL_STATUS=$(curl -s http://localhost:8080/status 2>/dev/null)
+printf "%s┌─ 📊 STEP 3: Remote Cache Statistics ───────────────────────┐%s\n" "$CYAN" "$RESET"
+FINAL_STATUS=$(curl -s http://$CACHE_SERVER/status 2>/dev/null)
 
 if [ -n "$FINAL_STATUS" ]; then
     CURR_SIZE=$(echo "$FINAL_STATUS" | jq -r '.CurrSize // 0' 2>/dev/null)
@@ -434,10 +464,19 @@ if [ -n "$FINAL_STATUS" ]; then
     USAGE_PERCENT=$(format_cache_usage "$CURR_SIZE" "$MAX_SIZE")
     
     # Create visual progress bar for cache usage (with better decimal precision)
-    FILLED=$(awk "BEGIN {printf \"%.0f\", $CURR_SIZE * 10 / $MAX_SIZE}")
-    EMPTY=$(( 10 - FILLED ))
-    PROGRESS_BAR=$(printf '%*s' "$FILLED" | tr ' ' '█')
-    PROGRESS_BAR="${PROGRESS_BAR}$(printf '%*s' "$EMPTY" | tr ' ' '░')"
+    # Use 20 bars for more granularity on small cache usage
+    if [ "$CURR_SIZE" -eq 0 ]; then
+        FILLED=0
+    else
+        FILLED=$(awk "BEGIN {printf \"%.0f\", $CURR_SIZE * 20 / $MAX_SIZE}")
+        # Ensure at least 1 bar shows when cache has content
+        if [ "$FILLED" -lt 1 ] && [ "$CURR_SIZE" -gt 0 ]; then
+            FILLED=1
+        fi
+    fi
+    EMPTY=$(( 20 - FILLED ))
+    PROGRESS_BAR=$(printf '%*s' "$FILLED" | tr ' ' '=')
+    PROGRESS_BAR="${PROGRESS_BAR}$(printf '%*s' "$EMPTY" | tr ' ' '-')"
     
     log_detail "Cache Capacity:"
     echo "    Used: $CURR_FORMATTED / Max: $MAX_FORMATTED"
@@ -456,7 +495,7 @@ if [ -n "$FINAL_STATUS" ]; then
     echo ""
     log_detail "Server Info:"
     echo "    Last updated: $(format_timestamp "$SERVER_TIME")"
-    HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/status 2>/dev/null)
+    HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://$CACHE_SERVER/status 2>/dev/null)
     echo "    Status: HTTP $HTTP_CODE (Server running)"
     echo "    Active goroutines: $NUM_GOROUTINES"
     if [ "$GIT_COMMIT" != "" ] && [ "$GIT_COMMIT" != "unknown" ]; then
@@ -465,10 +504,10 @@ if [ -n "$FINAL_STATUS" ]; then
 else
     echo "    ⚠️ Unable to retrieve cache statistics"
 fi
-printf "%s└────────────────────────────────────────────────────────────┘%s\n" "$CYAN" "$NC"
+printf "%s└────────────────────────────────────────────────────────────┘%s\n" "$CYAN" "$RESET"
 
 echo ""
-printf "%s┌─   PERFORMANCE SUMMARY ─────────────────────────────────────┐%s\n" "$CYAN" "$NC"
+printf "%s┌─   PERFORMANCE SUMMARY ─────────────────────────────────────┐%s\n" "$CYAN" "$RESET"
 echo ""
 if [ $SECOND_BUILD_TIME -gt 0 ] && [ $FIRST_BUILD_TIME -gt 0 ]; then
     if [ $SECOND_BUILD_TIME -lt $FIRST_BUILD_TIME ]; then
@@ -535,14 +574,14 @@ if [ $SECOND_BUILD_TIME -gt 0 ] && [ $FIRST_BUILD_TIME -gt 0 ]; then
 else
     echo "    (Timing data unavailable)"
 fi
-printf "%s└────────────────────────────────────────────────────────────┘%s\n" "$CYAN" "$NC"
+printf "%s└────────────────────────────────────────────────────────────┘%s\n" "$CYAN" "$RESET"
 echo ""
 
-printf "%s╔════════════════════════════════════════════════════════════╗%s\n" "$BLUE" "$NC"
-printf "%s║ ✅ Remote Cache Demonstration Complete!                   %s\n" "$BLUE" "$NC"
-printf "%s╚════════════════════════════════════════════════════════════╝%s\n" "$BLUE" "$NC"
+printf "%s╔════════════════════════════════════════════════════════════╗%s\n" "$BLUE" "$RESET"
+printf "%s║ ✅ Remote Cache Demonstration Complete!                   %s\n" "$BLUE" "$RESET"
+printf "%s╚════════════════════════════════════════════════════════════╝%s\n" "$BLUE" "$RESET"
 echo ""
-printf "%s┌─ 📖 For More Information ──────────────────────────────────┐%s\n" "$CYAN" "$NC"
+printf "%s┌─ 📖 For More Information ──────────────────────────────────┐%s\n" "$CYAN" "$RESET"
 log_detail "Technical Explanations:"
 echo "    See: README.md > 'How Remote Cache Works'"
 echo ""
@@ -553,5 +592,5 @@ if [ -n "$FINAL_STATUS" ]; then
     echo "    • Total artifacts cached: $NUM_FILES files"
     echo "    • Total CAS storage: $CACHE_SIZE bytes"
 fi
-printf "%s└────────────────────────────────────────────────────────────┘%s\n" "$CYAN" "$NC"
+printf "%s└────────────────────────────────────────────────────────────┘%s\n" "$CYAN" "$RESET"
 echo ""

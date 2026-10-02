@@ -1,0 +1,64 @@
+# ============================================================================
+# BAZEL DEV INFRA CONTAINER (Pre-built Image)
+# ============================================================================
+# Development environment with all build tools pre-installed
+#
+# USAGE:
+#   # First, start the centralized bazel-remote server (from docker-compose.bazel-remote-server.yml):
+#   docker-compose -f docker-compose.bazel-remote-server.yml up -d
+#
+#   # Then run dev containers (from docker-compose.bazel-infra-lab.yml):
+#   docker-compose -f docker-compose.bazel-infra-lab.yml run dev bash
+#   docker-compose -f docker-compose.bazel-infra-lab.yml run --name dev-2 dev bash
+#
+# This container connects to the centralized bazel-remote server
+# via Docker network (grpc://bazel-remote:9092)
+#
+# Benefits:
+#   - Instant startup (pre-built image, no build needed)
+#   - Bazel 9.2.0 with intelligent binary selection
+#   - All dev tools: Python 3.11, GCC 12, jq, etc.
+#   - Shares cache with other dev containers via centralized server
+# ============================================================================
+
+services:
+  dev:
+    platform: linux/arm64
+    image: ghcr.io/iakshayubale/bazel-infra-lab:latest
+    # Override entrypoint to prevent starting bazel-remote in dev container
+    # (bazel-remote runs in separate server container)
+    entrypoint: []
+    command: bash
+    # Enable TTY for interactive shell
+    stdin_open: true
+    tty: true
+    # Mount the project directory for live code editing
+    volumes:
+      # Project source code (read-write)
+      - ../..:/workspace
+      # Bazel cache (persistent across container restarts)
+      - bazel-dev-cache:/home/bazel/.cache/bazel
+      # Docker socket (optional - for building Docker images)
+      - /var/run/docker.sock:/var/run/docker.sock
+    # Environment variables
+    environment:
+      # Set Python to UTF-8
+      - PYTHONUNBUFFERED=1
+      # Terminal support for color output
+      - TERM=xterm-256color
+      # Bazel connects to centralized bazel-remote server
+      - BAZEL_REMOTE_CACHE=grpc://bazel-remote:9092
+    # Network - connects to same network as bazel-remote server
+    networks:
+      - bazel-remote-network
+
+volumes:
+  bazel-dev-cache:
+    driver: local
+
+# Use the same network as docker-compose.bazel-remote-server.yml
+# so dev containers can reach bazel-remote service
+networks:
+  bazel-remote-network:
+    name: docker_bazel-remote-network
+    driver: bridge

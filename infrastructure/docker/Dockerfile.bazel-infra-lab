@@ -1,0 +1,139 @@
+# ============================================================================
+# BAZEL-INFRA-LAB DEVELOPMENT ENVIRONMENT
+# ============================================================================
+# Development container with all tools for building and testing
+#
+# Includes:
+#   - Bazel 9.2.0: Build system with intelligent binary selection
+#   - Python 3.11: Scripting and tools
+#   - GCC/G++ 12: C++ compiler for building binaries
+#   - Git, curl, jq, make: Common development tools
+#
+# Note:
+#   - This container runs DEVELOPMENT WORK ONLY
+#   - bazel-remote cache server runs separately in its own container
+#   - Dev container connects to cache via Docker network: grpc://bazel-remote:9092
+#
+# DEPENDENCIES (Pinned for Reproducibility):
+#   - Ubuntu: 22.04 LTS
+#   - Bazel: 9.2.0
+#   - Python: 3.11
+#   - GCC/G++: 12 (from Ubuntu 22.04)
+# ============================================================================
+
+FROM ubuntu:22.04
+
+# Set environment variables for non-interactive installation
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=en_US.UTF-8 \
+    TZ=UTC
+
+# Add metadata labels
+LABEL maintainer="bazel-infra-lab" \
+      component="development-environment" \
+      bazel_version="9.2.0" \
+      python_version="3.11" \
+      bazel_remote_version="v2.4.1" \
+      ubuntu_version="22.04 LTS" \
+      description="Complete development environment for Bazel with C++, Python, and remote caching"
+
+# ============================================================================
+# INSTALL SYSTEM DEPENDENCIES
+# ============================================================================
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Python runtime
+    python3.11 \
+    python3-pip \
+    python3-dev \
+    \
+    # C++ Development
+    build-essential \
+    gcc-12 \
+    g++-12 \
+    cmake \
+    pkg-config \
+    \
+    # Version Control
+    git \
+    \
+    # Utilities
+    curl \
+    wget \
+    make \
+    gnupg \
+    ca-certificates \
+    bash \
+    zsh \
+    vim \
+    nano \
+    jq \
+    bc \
+    \
+    # Required for Bazel
+    openjdk-11-jdk-headless \
+    \
+    # Required for building some targets
+    autoconf \
+    libtool \
+    && \
+    # Clean up package manager cache
+    apt-get clean && rm -rf /var/lib/apt/lists/* && \
+    # Create symlinks for GCC/G++ alternatives
+    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-12 100 && \
+    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-12 100
+
+# ============================================================================
+# INSTALL BAZELISK (Auto-downloading Bazel wrapper)
+# ============================================================================
+# Bazelisk automatically detects and downloads the correct Bazel binary for your architecture
+# This elegantly solves ARM64 vs x86_64 compatibility issues in Docker
+
+# Detect CPU architecture and download appropriate Bazelisk binary
+RUN ARCH=$(uname -m) && \
+    case "$ARCH" in \
+      aarch64) BAZELISK_URL="https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-arm64" ;; \
+      x86_64)  BAZELISK_URL="https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64" ;; \
+      *)       echo "Unsupported architecture: $ARCH"; exit 1 ;; \
+    esac && \
+    curl -L "$BAZELISK_URL" -o /usr/local/bin/bazel && \
+    chmod +x /usr/local/bin/bazel && \
+    # Verify installation - download Bazel 9.2.0 if needed
+    BAZEL_VERSION=9.2.0 bazel version && \
+    echo "✓ Bazelisk installed successfully for architecture: $ARCH"
+
+# ============================================================================
+# SETUP WORKSPACE DIRECTORIES
+# ============================================================================
+
+RUN mkdir -p /workspace && \
+    chmod 755 /workspace
+
+# ============================================================================
+# SETUP PYTHON ENVIRONMENT
+# ============================================================================
+
+RUN python3.11 -m pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    python3.11 -m pip install --no-cache-dir \
+    virtualenv \
+    ipython \
+    pytest \
+    numpy
+
+# ============================================================================
+# COPY WELCOME MESSAGE
+# ============================================================================
+
+COPY welcome-infra-lab.sh /usr/local/bin/welcome
+RUN chmod +x /usr/local/bin/welcome
+
+# ============================================================================
+# ENTRYPOINT
+# ============================================================================
+# Start with welcome message, then interactive bash shell for development work
+# This container connects to centralized bazel-remote server via Docker network
+
+WORKDIR /workspace
+
+# Run welcome script and then bash
+CMD ["bash", "-c", "welcome && exec bash"]

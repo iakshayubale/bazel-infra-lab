@@ -1,0 +1,52 @@
+# ============================================================================
+# BAZEL REMOTE CACHE SERVER (Pre-built Image)
+# ============================================================================
+# Lightweight, open-source remote cache for Bazel
+#
+# USAGE:
+#   docker-compose -f docker-compose.bazel-remote-server.yml up -d
+#
+# This service is available at:
+#   - HTTP: http://localhost:8080 (REST API, status monitoring)
+#   - gRPC: grpc://localhost:9092 (Bazel client connection)
+#
+# The cache persists in Docker volume 'bazel-remote-cache'
+# and survives container restarts.
+#
+# Multiple dev containers (from docker-compose.bazel-infra-lab.yml)
+# connect to this single server via Docker network.
+# ============================================================================
+
+services:
+  bazel-remote:
+    # Pre-built bazel-remote v2.4.1 image from GitHub Container Registry
+    # Lightweight Alpine Linux base (~50MB)
+    # With welcome message and pro tips
+    image: ghcr.io/iakshayubale/bazel-remote-server:latest
+    container_name: bazel-remote-server
+    ports:
+      # HTTP/REST API for monitoring and status checks
+      - "8080:8080"
+      # gRPC API for Bazel client communication (bazel-remote protocol)
+      - "9092:9092"
+    volumes:
+      # Persist bazel-remote cache across container restarts
+      # This directory stores all CAS artifacts and action cache entries
+      - bazel-remote-cache:/var/bazel-remote/cache
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - bazel-remote-network
+
+volumes:
+  bazel-remote-cache:
+    driver: local
+
+networks:
+  bazel-remote-network:
+    driver: bridge
