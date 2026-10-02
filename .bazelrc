@@ -15,8 +15,9 @@ common --show_progress_rate_limit=0.2
 # Remote Caching Configuration (bazel-remote)
 # ============================================================================
 # Usage: bazel build //app:hello --config=remote-cache
+# Connects to centralized bazel-remote server
 
-build:remote-cache --remote_cache=grpc://localhost:9092
+build:remote-cache --remote_cache=grpc://bazel-remote:9092
 build:remote-cache --remote_timeout=3600s
 build:remote-cache --remote_upload_local_results=true
 build:remote-cache --build_metadata=REPO_URL=https://github.com/example/repo

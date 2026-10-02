@@ -370,7 +370,7 @@ When proposing new features:
 │
 ├── infrastructure/              # Deployment configs
 │   ├── docker/
-│   │   ├── docker-compose.yml   # bazel-remote service definition
+│   │   ├── docker-compose.bazel-remote-server.yml   # bazel-remote server service definition
 │   │   └── Dockerfile          # bazel-remote image build
 │   └── buildbuddy/
 │       └── config.yaml          # (Reference only - not used in POC)

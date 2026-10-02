@@ -59,11 +59,18 @@ printf "\n"
 # 1. Cache Server Status
 printf "%s┌─ 📦 Remote Cache Server Status ─────────────────────────────┐%s\n" "$CYAN" "$NC"
 
+# Detect if running in Docker
+if [ -f /.dockerenv ]; then
+    CACHE_URL="http://bazel-remote:8080"
+else
+    CACHE_URL="http://localhost:8080"
+fi
+
 CACHE_RUNNING=false
-if curl -s http://localhost:8080/status >/dev/null 2>&1; then
+if curl -s $CACHE_URL/status >/dev/null 2>&1; then
     CACHE_RUNNING=true
-    CACHE_DATA=$(curl -s http://localhost:8080/status 2>/dev/null)
-    printf "%s✓ bazel-remote cache server is RUNNING (HTTP: localhost:8080, gRPC: localhost:9092)%s\n" "$GREEN" "$NC"
+    CACHE_DATA=$(curl -s $CACHE_URL/status 2>/dev/null)
+    printf "%s✓ bazel-remote cache server is RUNNING (HTTP: ${CACHE_URL}, gRPC: grpc://bazel-remote:9092)%s\n" "$GREEN" "$NC"
     
     log_detail "Cache Utilization:"
     if command -v jq &> /dev/null; then
@@ -109,8 +116,8 @@ if curl -s http://localhost:8080/status >/dev/null 2>&1; then
     EMPTY=$((30 - FILLED))
     
     printf "    ["
-    printf "%${FILLED}s" | tr ' ' '█'
-    printf "%${EMPTY}s" | tr ' ' '░'
+    printf "%${FILLED}s" | tr ' ' '='
+    printf "%${EMPTY}s" | tr ' ' '-'
     printf "] %s%%\n" "$PERCENT"
     echo "    Current Size: $CURR_FORMATTED / $MAX_FORMATTED"
     echo "    Uncompressed: $UNCOMPRESSED_FORMATTED"

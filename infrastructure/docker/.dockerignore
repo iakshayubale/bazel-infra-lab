@@ -1,0 +1,44 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+DEVELOPMENT.md
+docs/
+*.md
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts (not needed for Docker build)
+bazel-bin/
+bazel-out/
+bazel-testlogs/
+.bazel-cache/
+
+# Local configuration (user-specific, don't include in image)
+.bazelrc.local
+.env
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+
+# Node (if applicable)
+node_modules/
+npm-debug.log
+
+# Python (if applicable)
+__pycache__/
+*.pyc
+.pytest_cache/

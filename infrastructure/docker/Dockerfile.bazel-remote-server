@@ -3,13 +3,19 @@
 # ============================================================================
 # This Dockerfile uses a 2-stage build process:
 #
-# STAGE 1 (golang:1.21-alpine): BUILDER - Compile bazel-remote from source
+# DEPENDENCIES (pinned versions for reproducibility):
+#   - Go: 1.21.13-alpine (for building bazel-remote)
+#   - bazel-remote: v2.4.1 (cache server)
+#   - Alpine Linux: 3.19 (runtime base image)
+#   - Bazel: 9.2.0+ (for local development)
+#
+# STAGE 1 (golang:1.21.13-alpine): BUILDER - Compile bazel-remote from source
 #   - Large image (~300MB) with Go compiler, git, build tools
 #   - Purpose: Compile bazel-remote source code into a binary
 #   - Output: A single compiled executable file
 #   - Discarded after: The image, compiler, source code all thrown away
 #
-# STAGE 2 (alpine:latest): RUNTIME - Run the compiled binary
+# STAGE 2 (alpine:3.19): RUNTIME - Run the compiled binary
 #   - Tiny image (~5-7MB) with only essential OS tools
 #   - Purpose: Execute the bazel-remote binary
 #   - Input: Only the compiled binary from Stage 1 (via COPY --from=builder)
@@ -21,7 +27,13 @@
 # ============================================================================
 # STAGE 1: BUILDER - Compile bazel-remote from Go source code
 # ============================================================================
-FROM golang:1.21-alpine as builder
+# Using pinned Go version for reproducibility
+FROM golang:1.21.13-alpine3.19 as builder
+
+# Add metadata labels for version tracking
+LABEL builder="bazel-remote-builder" \
+      go_version="1.21.13" \
+      alpine_version="3.19"
 
 # Set working directory inside the builder container
 WORKDIR /workspace
@@ -39,9 +51,16 @@ RUN apk add --no-cache git && \
 # ============================================================================
 # STAGE 2: RUNTIME - Minimal image with compiled bazel-remote binary
 # ============================================================================
-# Starting fresh with tiny alpine:latest (completely separate from builder stage)
-# Everything from the builder stage above is now DISCARDED
-FROM alpine:latest
+# Using pinned Alpine version for reproducibility
+FROM alpine:3.19
+
+# Add metadata labels for version tracking
+LABEL maintainer="bazel-infra-lab" \
+      component="bazel-remote-cache" \
+      bazel_remote_version="v2.4.1" \
+      alpine_version="3.19" \
+      description="Lightweight Bazel remote cache server" \
+      repo_url="https://github.com/buchgr/bazel-remote"
 
 # Install runtime dependencies only (NOT build tools)
 # - ca-certificates: Needed for HTTPS/TLS connections
@@ -66,6 +85,14 @@ COPY --from=builder /tmp/bazel-remote /usr/local/bin/bazel-remote
 # chmod 777 = Allow all processes to read/write to this directory
 RUN mkdir -p /var/bazel-remote/cache && chmod 777 /var/bazel-remote/cache
 
+# ============================================================================
+# COPY WELCOME MESSAGE AND ENTRYPOINT
+# ============================================================================
+
+COPY welcome-bazel-remote.sh /usr/local/bin/welcome
+COPY entrypoint-bazel-remote.sh /usr/local/bin/entrypoint
+RUN chmod +x /usr/local/bin/welcome /usr/local/bin/entrypoint
+
 # Expose the cache server ports
 # Port 8080 = HTTP/REST endpoint for monitoring (/status, /health)
 # Port 9092 = gRPC endpoint for Bazel client communication
@@ -82,6 +109,7 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=40s \
 # START BAZEL-REMOTE CACHE SERVER
 # ============================================================================
 # This command runs when the container starts
+# The entrypoint script shows the welcome message, then starts bazel-remote
 # Arguments:
 #   --dir=/var/bazel-remote/cache = Directory to store all cached artifacts
 #   --http_address=0.0.0.0:8080 = HTTP/REST endpoint for monitoring (/status, /health)
@@ -90,9 +118,11 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=40s \
 # 
 # When you run: docker-compose up -d
 # → Docker starts this container
-# → Runs this CMD
-# → bazel-remote server starts on:
+# → Runs the entrypoint script
+# → Shows welcome message
+# → Starts bazel-remote server on:
 #    • HTTP: http://localhost:8080 (REST API, monitoring)
 #    • gRPC: grpc://localhost:9092 (Bazel client communication)
 # → Ready to cache bazel build artifacts!
-CMD ["bazel-remote", "--dir=/var/bazel-remote/cache", "--http_address=0.0.0.0:8080", "--grpc_address=0.0.0.0:9092", "--max_size=10"]
+ENTRYPOINT ["/usr/local/bin/entrypoint"]
+CMD ["--dir=/var/bazel-remote/cache", "--http_address=0.0.0.0:8080", "--grpc_address=0.0.0.0:9092", "--max_size=10"]
