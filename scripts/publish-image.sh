@@ -61,7 +61,7 @@ fi
 # Build the image
 echo -e "${BLUE}📦 Building image...${NC}"
 cd "$(dirname "$0")/../infrastructure/docker"
-docker-compose build dev --no-cache
+docker-compose -f docker-compose.bazel-infra-lab.yml build dev --no-cache
 
 # Tag for GitHub Container Registry (docker-compose creates image as: docker-dev:latest)
 echo -e "${BLUE}🏷️  Tagging image...${NC}"
