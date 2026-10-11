@@ -30,6 +30,7 @@
 - [BuildBuddy: Cache Hits and Build Visualization](#buildbuddy-cache-hits-and-build-visualization)
   - [Switching the Cache Backend](#switching-the-cache-backend)
   - [Remote Execution](#remote-execution)
+  - [Verifying Remote Execution](#verifying-remote-execution)
   - [What the BuildBuddy UI Shows](#what-the-buildbuddy-ui-shows)
 - [Understanding Bazel Remote Cache](#understanding-bazel-remote-cache)
   - [The Architecture](#the-architecture)
@@ -295,6 +296,29 @@ bazel build //app:hello --config=remote-exec
 - `remote-exec` sets `--strategy=CppLink=standalone`: the sandboxed link in the dev container fails with `cannot find 'ld'`, so the link runs unsandboxed and locally.
 - Add `--noremote_accept_cached` to skip action cache lookups and force remote execution. BuildBuddy then shows 0 AC hits and 0 AC misses, because no lookups happen; outputs are still written to CAS.
 - Results: [BuildBuddy UI](http://localhost:8081).
+
+### Verifying Remote Execution
+
+Bazel's cache checks happen first. If the action cache (AC) and content store (CAS) already hold the outputs, Bazel downloads them and runs nothing, so no remote execution happens.
+
+Check the summary line at the end of the build output:
+
+- `N remote`: N actions ran on the BuildBuddy executor.
+- `N remote cache hit`: outputs came from the cache; nothing ran.
+- `N internal`: Bazel handled the action itself.
+
+Force remote execution by skipping cache lookups and changing the action keys, so each action must run again:
+
+```bash
+bazel build //lib:math --config=remote-exec --noremote_accept_cached --copt=-DREMOTE_CHECK=$(date +%s)
+```
+
+- `--noremote_accept_cached` skips remote cache hits.
+- The unique `--copt` changes the action keys, so Bazel's local action cache also misses.
+
+To confirm in the UI, open the invocation link and go to the **Executions** tab. It lists each remotely executed action with its **Executor Host ID**, which matches the executor's startup log (`executor_host_id=...`).
+
+![BuildBuddy Executions tab showing a remotely executed action](docs/images/buildbuddy/buildbuddy-executions-remote-execution.png)
 
 ### What the BuildBuddy UI Shows
 
