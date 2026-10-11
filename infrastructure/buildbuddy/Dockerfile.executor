@@ -1,0 +1,6 @@
+FROM gcr.io/flame-public/buildbuddy-executor-enterprise:latest
+
+# Toolchain for bare (non-nested) action execution inside this container
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential python3 ca-certificates && \
+    rm -rf /var/lib/apt/lists/*

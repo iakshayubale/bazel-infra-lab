@@ -1,53 +1,28 @@
-# BuildBuddy Configuration
-# See: https://www.buildbuddy.io/docs/on-prem/self-hosted
+# BuildBuddy open-source on-prem config.
+# Mounted at /config.yaml in the buildbuddy container (see docker-compose.buildbuddy.yml).
+# Docs: https://www.buildbuddy.io/docs/config
 
 app:
-  # Event log storage
-  events_api_url: "http://localhost:8086"
-  build_buddy_url: "http://localhost:8086"
+  # Public URL used in build links (host port of the UI)
+  build_buddy_url: "http://localhost:8081"
 
-# Cache configuration
-cache:
-  # Use in-memory cache with file backing
-  max_size_bytes: 10737418240  # 10GB
-  
-# Database configuration (SQLite for self-hosted)
 database:
-  data_source: "/var/buildbuddy/buildbuddy.db"
+  # SQLite database for invocation metadata
+  data_source: "sqlite3:///data/buildbuddy/buildbuddy.db"
 
-# Executor configuration
-remote_execution_config:
-  # Enable remote execution
-  enable_remote_execution: true
-  # Default instance
-  default_exec_config:
-    runner_count: 4
-  
-# Authentication (disabled by default for local setup)
-auth:
-  enable_anonymous_usage: true
+storage:
+  # Keep build event data for 30 days (0 disables expiry)
+  ttl_seconds: 2592000
+  disk:
+    root_directory: "/data/buildbuddy/storage"
 
-# API configuration
-api:
-  # gRPC port
-  port: 8085
-  
-# HTTP/UI configuration  
-http:
-  # Dashboard port
-  port: 8086
+cache:
+  # Remote cache size limit (10 GB)
+  max_size_bytes: 10737418240
+  disk:
+    root_directory: "/data/buildbuddy/cache"
 
-# Logging
-log:
-  level: "info"
-
-# Features
-features:
-  # Enable caching
-  cache: true
-  # Enable remote execution
-  remote_execution: true
-  # Enable invocation history
-  invocation_history: true
-  # Enable build metrics
-  build_metrics: true
+remote_execution:
+  enable_remote_exec: true
+  # Task queue for executors (service name from docker-compose.buildbuddy.yml)
+  redis_target: "redis:6379"

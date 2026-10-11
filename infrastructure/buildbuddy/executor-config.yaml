@@ -1,0 +1,12 @@
+# BuildBuddy executor config. Mounted at /config.yaml in the buildbuddy-executor container.
+# Docs: https://www.buildbuddy.io/docs/config-rbe
+
+executor:
+  # Plaintext gRPC to the app container on the compose network
+  app_target: "grpc://buildbuddy:1985"
+  # Container paths on the executor-work volume
+  root_directory: "/buildbuddy/remotebuilds/"
+  local_cache_directory: "/buildbuddy/filecache/"
+  local_cache_size_bytes: 5000000000 # 5 GB
+  docker_socket: "/var/run/docker.sock"
+  enable_bare_runner: true

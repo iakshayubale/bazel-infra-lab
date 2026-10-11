@@ -1,0 +1,57 @@
+# BuildBuddy (open-source, on-prem): remote cache + build visualization UI
+#
+# Usage (from infrastructure/docker):
+#   docker compose -f docker-compose.buildbuddy.yml up -d
+#
+# Endpoints:
+#   UI (cache hits/misses, invocations):  http://localhost:8081
+#   gRPC (remote cache + BES):            grpc://localhost:1985
+#   Prometheus metrics:                   http://localhost:9090/metrics
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - bazel-remote-network
+
+  buildbuddy:
+    image: gcr.io/flame-public/buildbuddy-app-enterprise:latest
+    restart: unless-stopped
+    depends_on:
+      - redis
+    ports:
+      - "8081:8080" # UI (host 8080 is used by bazel-remote)
+      - "1985:1985" # gRPC: remote cache + Build Event Service
+      - "9090:9090" # Prometheus metrics
+    volumes:
+      - ../buildbuddy/config.yaml:/config.yaml:ro
+      - buildbuddy-data:/data/buildbuddy
+    networks:
+      - bazel-remote-network
+
+  buildbuddy-executor:
+    build:
+      context: ../buildbuddy
+      dockerfile: Dockerfile.executor
+    image: bazel-infra-lab-executor:local
+    restart: unless-stopped
+    depends_on:
+      - buildbuddy
+    environment:
+      MY_HOSTNAME: buildbuddy-executor
+      MY_PORT: "1987"
+    volumes:
+      - ../buildbuddy/executor-config.yaml:/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - executor-work:/buildbuddy
+    networks:
+      - bazel-remote-network
+
+volumes:
+  buildbuddy-data:
+  executor-work:
+
+networks:
+  bazel-remote-network:
+    driver: bridge

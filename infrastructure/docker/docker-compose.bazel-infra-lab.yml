@@ -8,8 +8,8 @@
 #   docker-compose -f docker-compose.bazel-remote-server.yml up -d
 #
 #   # Then run dev containers (from docker-compose.bazel-infra-lab.yml):
-#   docker-compose -f docker-compose.bazel-infra-lab.yml run dev bash
-#   docker-compose -f docker-compose.bazel-infra-lab.yml run --name dev-2 dev bash
+#   docker-compose -f docker-compose.bazel-infra-lab.yml run --name alice bazel-infra-lab bash
+#   docker-compose -f docker-compose.bazel-infra-lab.yml run --name bob bazel-infra-lab bash
 #
 # This container connects to the centralized bazel-remote server
 # via Docker network (grpc://bazel-remote:9092)
@@ -17,12 +17,12 @@
 # Benefits:
 #   - Instant startup (pre-built image, no build needed)
 #   - Bazel 9.2.0 with intelligent binary selection
-#   - All dev tools: Python 3.11, GCC 12, jq, etc.
+#   - All dev tools: Python 3.11, GCC 14, jq, etc.
 #   - Shares cache with other dev containers via centralized server
 # ============================================================================
 
 services:
-  dev:
+  bazel-infra-lab:
     platform: linux/arm64
     image: ghcr.io/iakshayubale/bazel-infra-lab:latest
     # Override entrypoint to prevent starting bazel-remote in dev container

@@ -10,7 +10,7 @@
 
 </div>
 
-> **Proof-of-Concept Notice**: This project demonstrates remote build caching using a **self-hosted local `bazel-remote` server**. It serves as an educational reference for understanding how Bazel's remote caching works in a simplified environment infrastructure.
+> **Proof-of-Concept Notice**: This project demonstrates remote build caching using a **self-hosted local `bazel-remote` server**, and remote execution on a self-hosted **BuildBuddy** executor. It serves as an educational reference for understanding how Bazel's remote caching works in a simplified environment infrastructure.
 
 ---
 
@@ -20,13 +20,17 @@
 - [Introduction](#introduction)
 - [Features \& Highlights](#features--highlights)
   - [What You Get](#what-you-get)
-  - [Included in This POC](#included-in-this-poc)
-  - [Not Included (Out of Scope)](#not-included-out-of-scope)
+  - [Supported Today](#supported-today)
+  - [Not Supported (Out of Scope)](#not-supported-out-of-scope)
 - [Quick Start in 4 Steps](#quick-start-in-4-steps)
   - [1. Start Centralized Cache Server (30 seconds)](#1-start-centralized-cache-server-30-seconds)
   - [2. Start First Dev Container (10-20 seconds)](#2-start-first-dev-container-10-20-seconds)
   - [3. Build and Test Cache](#3-build-and-test-cache)
   - [4. Start Additional Dev Containers (Team Scenario)](#4-start-additional-dev-containers-team-scenario)
+- [BuildBuddy: Cache Hits and Build Visualization](#buildbuddy-cache-hits-and-build-visualization)
+  - [Switching the Cache Backend](#switching-the-cache-backend)
+  - [Remote Execution](#remote-execution)
+  - [What the BuildBuddy UI Shows](#what-the-buildbuddy-ui-shows)
 - [Understanding Bazel Remote Cache](#understanding-bazel-remote-cache)
   - [The Architecture](#the-architecture)
     - [System Overview](#system-overview)
@@ -90,16 +94,21 @@ A **comprehensive, hands-on exploration** of Bazel remote build cache setup with
 
 ---
 
-### Included in This POC
-- **Local bazel-remote cache server** in Docker
+### Supported Today
+- **Local bazel-remote cache server** in Docker (`--config=remote-cache`)
+- **BuildBuddy cache and UI** in Docker (`--config=buildbuddy`), with cache hit/miss and invocation views
+- **Remote execution** of compile and archive actions on a BuildBuddy executor (`--config=remote-exec`); the link step runs locally
+- **Named per-developer dev containers** that trigger all builds (Bazel 9.2.0, GCC 14.3)
 - **Interactive demonstration scripts** showing real-time cache hits/misses
 - **Performance metrics** and status endpoints monitoring
 - **Best practices** documentation
 
-### Not Included (Out of Scope)
-- **Remote execution** (distributed build execution)
+### Not Supported (Out of Scope)
+- **Remote link step**: the sandboxed link fails in the dev container (`cannot find 'ld'`), so `CppLink` runs unsandboxed and locally
+- **Multiple executors or hosts**: one arm64 executor on one machine
+- **Authentication and TLS**: BuildBuddy runs with a dev/test enterprise license and no auth configured
 - **Multi-machine team setup** infrastructure
-- *Focus is strictly targeted on caching mechanics*
+- *Focus is strictly targeted on caching and single-machine remote execution*
 
 ---
 
@@ -133,20 +142,20 @@ docker-compose -f docker-compose.bazel-remote-server.yml up -d
 ### 2. Start First Dev Container (10-20 seconds)
 
 ```bash
-# In same infrastructure/docker directory, run dev container
-docker-compose -f docker-compose.bazel-infra-lab.yml run dev bash
+# In same infrastructure/docker directory, start a named dev container
+docker-compose -f docker-compose.bazel-infra-lab.yml run --name alice bazel-infra-lab bash
 ```
 
 **What happens:**
 - Pulls pre-built dev image from GitHub Container Registry
-- No build needed (image includes Bazel 9.2.0, Python 3.11, GCC 12)
+- No build needed (image includes Bazel 9.2.0, Python 3.11, GCC 14)
 - Automatically connects to centralized bazel-remote via Docker network
 - You're in `/workspace` (project root mounted)
 
 **Expected output:**
 ```
 [+] Creating 1/1
- ✔ Container bazel-infra-lab-dev  Created    # Pre-built image pulled
+ ✔ Container alice  Created    # Pre-built image pulled
  
 # You're now inside the container:
 root@<container-id>:/workspace#
@@ -173,10 +182,152 @@ time bazel build //app:hello --config=remote-cache
 # In another terminal, start a second dev container
 # It automatically connects to the SAME centralized server
 
-docker-compose -f docker-compose.bazel-infra-lab.yml run --name dev-2 dev bash
-# Inside dev-2: bazel build //app:hello --config=remote-cache
-# [Output: CACHE HIT! ~200ms - downloads from cache shared with dev-1]
+docker-compose -f docker-compose.bazel-infra-lab.yml run --name bob bazel-infra-lab bash
+# Inside bob: bazel build //app:hello --config=remote-cache
+# [Output: CACHE HIT! ~200ms - downloads from cache shared with alice]
 ```
+
+---
+
+## BuildBuddy: Cache Hits and Build Visualization
+
+BuildBuddy is an optional, separate container (`docker-compose.buildbuddy.yml`) that serves the same kind of remote cache plus a web UI showing cache hits and misses per action. bazel-remote is unchanged and can run at the same time.
+
+```bash
+cd infrastructure/docker
+docker-compose -f docker-compose.buildbuddy.yml up -d
+```
+
+- UI: `http://localhost:8081`
+- gRPC (cache and build events): `grpc://localhost:1985`
+
+### Switching the Cache Backend
+
+Pick the backend with one `--config` flag. Nothing else changes.
+
+| Config | Remote cache | Build visualization (UI) | Remote execution |
+|---|---|---|---|
+| `--config=remote-cache` | bazel-remote (`grpc://bazel-remote:9092`) | No | No |
+| `--config=buildbuddy` | BuildBuddy (`grpc://buildbuddy:1985`) | Yes (`http://localhost:8081`) | No |
+| `--config=remote-exec` | BuildBuddy (`grpc://buildbuddy:1985`) | Yes | Yes (compile and archive actions) |
+
+Run these from the `bazel-infra-lab` dev container:
+
+```bash
+# Cache with BuildBuddy UI (view results at http://localhost:8081)
+bazel build //app:hello --config=buildbuddy
+
+# Cache only, no UI
+bazel build //app:hello --config=remote-cache
+```
+
+### Remote Execution
+
+With `--config=remote-exec`, compile and archive actions run on the BuildBuddy executor (`buildbuddy-executor` container). The link step runs in the calling container. The `bazel-infra-lab` dev container triggers these builds (GCC 14.3, Bazel 9.2.0).
+
+```mermaid
+%%{init: {'flowchart': {'htmlLabels': true}, 'theme': 'default', 'themeVariables': { 'subGraphTitleColor': '#000000' }}}%%
+graph TB
+    subgraph CLIENTS["<span style='color:#000;'>BAZEL CLIENT (Docker container)</span>"]
+        DEV["DOCKER CONTAINER: bazel-infra-lab<br/>bazel build --config=remote-exec<br/>GCC 14.3, Bazel 9.2.0"]
+        LINK["🔨 Link step (CppLink standalone)<br/>runs in calling container"]
+    end
+
+    subgraph NETWORK["<span style='color:#000;'>NETWORK</span>"]
+        GRPC["gRPC Connection<br/>grpc://buildbuddy:1985"]
+    end
+
+    subgraph BB["<span style='color:#000;'>DOCKER CONTAINERS: buildbuddy, redis</span>"]
+        APP["BuildBuddy App<br/>cache (AC + CAS), BES<br/>UI :8081, metrics :9090"]
+        QUEUE["Redis<br/>execution queue"]
+    end
+
+    subgraph EXEC["<span style='color:#000;'>DOCKER CONTAINER: buildbuddy-executor</span>"]
+        EXECUTOR["⚙️ Compile and archive actions<br/>GCC 14, arm64, bare runner"]
+    end
+
+    %% Index 0
+    DEV --> GRPC
+    %% Index 1
+    GRPC --> APP
+    %% Index 2
+    APP --> QUEUE
+    %% Index 3
+    QUEUE -->|"dispatch actions"| EXECUTOR
+    %% Index 4
+    EXECUTOR -->|"outputs to CAS"| APP
+    %% Index 5
+    APP --> GRPC
+    %% Index 6
+    GRPC --> DEV
+    %% Index 7
+    DEV --> LINK
+
+    style CLIENTS fill:#e3f2fd,stroke:#1976d2,stroke-width:3px,color:#000
+    style NETWORK fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#000
+    style BB fill:#f3e5f5,stroke:#7b1fa2,stroke-width:3px,color:#000
+    style EXEC fill:#e8f5e9,stroke:#1b5e20,stroke-width:3px,color:#000
+    style DEV fill:#bbdefb,stroke:#0d47a1,stroke-width:2px,color:#000
+    style LINK fill:#ffcdd2,stroke:#b71c1c,stroke-width:2px,color:#000
+    style GRPC fill:#ffe0b2,stroke:#e65100,stroke-width:2px,color:#000
+    style APP fill:#e1bee7,stroke:#4a148c,stroke-width:2px,color:#000
+    style QUEUE fill:#e1bee7,stroke:#4a148c,stroke-width:2px,color:#000
+    style EXECUTOR fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px,color:#000
+
+    %% Remote execution path (Indices 1-5)
+    linkStyle 1,2,3,4,5 stroke:#22c55e,stroke-width:2px;
+
+    %% Local link path (Index 7)
+    linkStyle 7 stroke:#ef4444,stroke-width:2px,stroke-dasharray: 5 5;
+```
+
+```bash
+cd infrastructure/docker
+docker-compose -f docker-compose.buildbuddy.yml up -d
+
+# From the host, start a dev container
+docker-compose -f docker-compose.bazel-infra-lab.yml run --name alice bazel-infra-lab bash
+
+# Inside alice
+bazel build //app:hello --config=remote-exec
+```
+
+- `remote-exec` sets `--strategy=CppLink=standalone`: the sandboxed link in the dev container fails with `cannot find 'ld'`, so the link runs unsandboxed and locally.
+- Add `--noremote_accept_cached` to skip action cache lookups and force remote execution. BuildBuddy then shows 0 AC hits and 0 AC misses, because no lookups happen; outputs are still written to CAS.
+- Results: [BuildBuddy UI](http://localhost:8081).
+
+### What the BuildBuddy UI Shows
+
+Each build prints an invocation link at the start and end of its output, for example `http://localhost:8081/invocation/<id>`. Without auth configured, open invocations by URL; they do not appear in the build history list.
+
+The saved report for `//lib:math` (invocation `292ccdcd-b9af-4aa7-9a7a-def0bc0e214b`, a cache-hit run) is at [root's build //lib:math report](docs/reports/root's%20build%20__lib_math%20_%20BuildBuddy.html). Its `_files` folder is missing, so styles and tabs do not load when the file is opened locally.
+
+The screenshots below are from invocation `a63a7633-ab07-45c9-a0bb-a31c1b0be05f` and show each part of the UI.
+
+![BuildBuddy header and build logs](docs/images/buildbuddy/01-header-logs.png)
+
+- Header: invocation ID, target, date, status, duration, user, host, Bazel version, target and action counts, and the remote execution badge.
+- Logs: Bazel console output, including the analyzed targets, output paths, and the cache summary.
+
+![BuildBuddy cache stats](docs/images/buildbuddy/02-cache-stats.png)
+
+- Cache: AC and CAS hits, misses, and writes; bytes transferred; throughput; invalidation reasons; action and runner types.
+
+![BuildBuddy details](docs/images/buildbuddy/03-details.png)
+
+- Details: the explicit and effective command lines, startup options, and client environment.
+
+![BuildBuddy artifacts](docs/images/buildbuddy/04-artifacts.png)
+
+- Artifacts: output files of the target, with size and digest.
+
+![BuildBuddy timing](docs/images/buildbuddy/05-timing.png)
+
+- Timing: flame chart of the build phases (loading, analysis, and execution) per thread.
+
+![BuildBuddy raw events](docs/images/buildbuddy/06-raw.png)
+
+- Raw: the list of build events, with the full payload available as JSON.
 
 ---
 
@@ -417,17 +568,17 @@ graph TB
         Network["Docker Network: bazel-remote-network"]
     end
     
-    subgraph DEV1["<span style='color:#000;'>Dev Container 1: dev-alice</span>"]
+    subgraph DEV1["<span style='color:#000;'>Dev Container 1: alice</span>"]
         BC1["Bazel Client<br/>(bazel build)"]
         SRC1["Source Code<br/>+ Compiler Flags"]
     end
     
-    subgraph DEV2["<span style='color:#000;'>Dev Container 2: dev-bob</span>"]
+    subgraph DEV2["<span style='color:#000;'>Dev Container 2: bob</span>"]
         BC2["Bazel Client<br/>(bazel build)"]
         SRC2["Source Code<br/>+ Compiler Flags"]
     end
     
-    subgraph DEV3["<span style='color:#000;'>Dev Container N: dev-charlie</span>"]
+    subgraph DEV3["<span style='color:#000;'>Dev Container N: charlie</span>"]
         BC3["Bazel Client<br/>(bazel build)"]
         SRC3["Source Code<br/>+ Compiler Flags"]
     end
@@ -467,7 +618,7 @@ graph TB
     style Network fill:#fff9c4,stroke:#f57f17,stroke-width:2px,color:#000
 ```
 
-**Key Insight**: All dev containers access the **same persistent volume** (`/var/bazel-remote/cache`). When dev-alice builds first:
+**Key Insight**: All dev containers access the **same persistent volume** (`/var/bazel-remote/cache`). When alice builds first:
 1. **alice**: Compiles → uploads artifacts → populates cache
 2. **bob**: Queries cache → CACHE HIT → downloads artifacts (4-5x faster!)
 3. **charlie**: Same as bob (also benefits from alice's work)
@@ -482,21 +633,21 @@ cd infrastructure/docker
 docker-compose -f docker-compose.bazel-remote-server.yml up -d
 
 # Terminal 2 - First dev container builds (populates cache)
-docker-compose -f docker-compose.bazel-infra-lab.yml run --name dev-alice dev bash
-# Inside dev-alice: bazel build //app:hello --config=remote-cache
+docker-compose -f docker-compose.bazel-infra-lab.yml run --name alice bazel-infra-lab bash
+# Inside alice: bazel build //app:hello --config=remote-cache
 # Output: ~10 seconds (compiles locally, uploads artifacts)
 
 # Terminal 3 - Second dev container (reuses cache)
-docker-compose -f docker-compose.bazel-infra-lab.yml run --name dev-bob dev bash  
-# Inside dev-bob: bazel build //app:hello --config=remote-cache
+docker-compose -f docker-compose.bazel-infra-lab.yml run --name bob bazel-infra-lab bash
+# Inside bob: bazel build //app:hello --config=remote-cache
 # Output: ~2 seconds (CACHE HIT - downloads from shared cache!)
 
 # Verify: Check cache statistics (from inside container)
 curl -s http://bazel-remote:8080/status | jq '.NumFiles'
-# Shows: Same artifacts are accessible to both dev-alice and dev-bob
+# Shows: Same artifacts are accessible to both alice and bob
 ```
 
-**Result**: 4-5x speedup for dev-bob because cache was pre-populated by dev-alice!
+**Result**: 4-5x speedup for bob because cache was pre-populated by alice!
 
 ---
 
@@ -520,7 +671,7 @@ curl -s http://bazel-remote:8080/status | jq '.NumFiles'
 
 ```bash
 # Start a dev container (from infrastructure/docker)
-docker-compose -f docker-compose.bazel-infra-lab.yml run dev bash
+docker-compose -f docker-compose.bazel-infra-lab.yml run --name alice bazel-infra-lab bash
 
 # Step 1: First build (CACHE MISS)
 time bazel build //app:hello --config=remote-cache
@@ -548,12 +699,12 @@ time bazel build //app:hello --config=remote-cache
 # With bazel-remote running, test multiple developers sharing cache:
 
 # Dev 1 builds and populates cache
-docker-compose -f docker-compose.bazel-infra-lab.yml run --name dev-alice dev bash
+docker-compose -f docker-compose.bazel-infra-lab.yml run --name alice bazel-infra-lab bash
 # Inside: bazel build //benchmark:compute_crypto --config=remote-cache
 # [Compiles, uploads artifacts] (~10 seconds)
 
 # Dev 2 builds same target (should hit cache)
-docker-compose -f docker-compose.bazel-infra-lab.yml run --name dev-bob dev bash  
+docker-compose -f docker-compose.bazel-infra-lab.yml run --name bob bazel-infra-lab bash
 # Inside: bazel build //benchmark:compute_crypto --config=remote-cache
 # [Downloads artifacts] (~2 seconds)
 
@@ -751,6 +902,7 @@ bazel-infra-lab/
 │   ├── docker/
 │   │   ├── docker-compose.bazel-remote-server.yml    Centralized cache server
 │   │   ├── docker-compose.bazel-infra-lab.yml        Dev container config
+│   │   ├── docker-compose.buildbuddy.yml             BuildBuddy, executor, and Redis stack
 │   │   ├── Dockerfile.bazel-remote-server            Cache server image
 │   │   ├── Dockerfile.bazel-infra-lab                Dev environment image
 │   │   ├── entrypoint-bazel-remote.sh                Cache server startup
@@ -759,7 +911,8 @@ bazel-infra-lab/
 │   │   ├── PUBLISHING.md                             Publishing guide
 │   │   └── VERSIONS.md                               Version information
 │   └── buildbuddy/
-│       └── config.yaml               BuildBuddy configuration (optional)
+│       ├── config.yaml               BuildBuddy app configuration
+│       └── executor-config.yaml      BuildBuddy executor configuration
 │
 ├── scripts/                       Demonstration & Utilities
 │   ├── demonstrate-cache.sh          Interactive cache demo (MAIN SCRIPT)
@@ -823,7 +976,8 @@ Common issues covered:
 
 This POC currently focuses on **single-machine remote caching only**. The following features are planned for future documentation:
 
-- **Remote Execution**: Distributed builds where compilation happens on remote servers
+- **Remote link step**: Running `CppLink` remotely, blocked today by the sandbox `ld` failure
+- **Multiple executors**: Scaling compile actions across more than one executor
 - **Multi-machine Setup**: Shared cache across multiple developer machines
 - **TLS/mTLS**: Encrypted communication for security
 - **High Availability**: Multiple cache server replicas with load balancing
@@ -842,6 +996,8 @@ The following have been implemented and tested in this POC:
 - [x] Cache persistence across `bazel clean` and container restarts
 - [x] Real-time performance measurement and logging
 - [x] Both macOS and Linux compatibility
+- [x] Remote execution of compile and archive actions on the BuildBuddy executor (`--config=remote-exec`)
+- [x] BuildBuddy invocation UI with cache and execution stats
 
 ---
 
@@ -850,10 +1006,10 @@ The following have been implemented and tested in this POC:
 This is a **Proof-of-Concept** designed to educate on how Bazel remote caching works in a simplified environment.
 
 **What is NOT included:**
-- Remote execution (distributed builds) - only caching is demonstrated
+- Remote link step (CppLink runs locally) and multi-executor distributed builds
 - Production-scale multi-developer team setup
-- Multi-machine shared cache (single Docker container only)
-- TLS/mTLS security features
+- Multi-machine shared cache or executor pool (single Docker host only)
+- TLS/mTLS and authentication
 
 ---
 
@@ -869,8 +1025,12 @@ docker-compose -f docker-compose.bazel-remote-server.yml ps          # Check if 
 
 # --- Dev Container Management ---
 cd infrastructure/docker
-docker-compose -f docker-compose.bazel-infra-lab.yml run dev bash                  # Start dev container
-docker-compose -f docker-compose.bazel-infra-lab.yml run --name dev-alice dev bash # Named dev container
+docker-compose -f docker-compose.bazel-infra-lab.yml run --name alice bazel-infra-lab bash   # Start named dev container (alice)
+docker-compose -f docker-compose.bazel-infra-lab.yml run --name bob bazel-infra-lab bash     # Start named dev container (bob)
+
+# --- BuildBuddy (UI at http://localhost:8081) ---
+docker-compose -f docker-compose.buildbuddy.yml up -d                              # Start BuildBuddy, executor, Redis
+docker-compose -f docker-compose.buildbuddy.yml down                            # Stop BuildBuddy stack
 
 # --- Cache Monitoring (from inside dev container) ---
 curl -s http://bazel-remote:8080/status | jq .                                     # Check cache status

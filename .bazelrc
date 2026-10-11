@@ -17,11 +17,45 @@ common --show_progress_rate_limit=0.2
 # Usage: bazel build //app:hello --config=remote-cache
 # Connects to centralized bazel-remote server
 
+# ============================================================================
+# Cache backend switch (pick one --config per build)
+# ============================================================================
+#   Dev container: --config=buildbuddy  (buildbuddy remote cache + remote build + visualization)
+#                  --config=remote-cache (bazel-remote cache only)
+#
+# BuildBuddy: UI at http://localhost:8081 (cache hits/misses, timings)
+
+# Dev container build with bazel-remote cache (published port 9092).
 build:remote-cache --remote_cache=grpc://bazel-remote:9092
 build:remote-cache --remote_timeout=3600s
 build:remote-cache --remote_upload_local_results=true
 build:remote-cache --build_metadata=REPO_URL=https://github.com/example/repo
 build:remote-cache --build_metadata=COMMIT_SHA=local-build
+
+# Dev container build with buildbuddy with remote cache
+build:buildbuddy --remote_cache=grpc://buildbuddy:1985
+build:buildbuddy --bes_backend=grpc://buildbuddy:1985
+build:buildbuddy --bes_results_url=http://localhost:8081/invocation/
+build:buildbuddy --remote_upload_local_results=true
+build:buildbuddy --remote_timeout=3600s
+
+# ============================================================================
+# Remote Execution Configuration (BuildBuddy executor, arm64)
+# ============================================================================
+# Usage (from the dev container): bazel build //... --config=remote-exec
+# Actions run in the buildbuddy-executor container, not in the local or primary dev container.
+# Executor registers as pool os:linux arch:arm64, so Arch must be arm64.
+
+build:remote-exec --config=buildbuddy
+build:remote-exec --remote_executor=grpc://buildbuddy:1985
+build:remote-exec --remote_default_exec_properties=OSFamily=linux
+build:remote-exec --remote_default_exec_properties=Arch=arm64
+build:remote-exec --remote_default_exec_properties=workload-isolation-type=none
+build:remote-exec --remote_download_minimal
+build:remote-exec --jobs=50
+build:remote-exec --define=EXECUTOR=remote
+# Sandboxed CppLink fails in the dev container ("cannot find 'ld'"); link runs unsandboxed.
+build:remote-exec --strategy=CppLink=standalone
 
 # ============================================================================
 # Local Configuration (no caching)
