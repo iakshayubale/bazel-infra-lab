@@ -300,7 +300,7 @@ bazel build //app:hello --config=remote-exec
 
 Each build prints an invocation link at the start and end of its output, for example `http://localhost:8081/invocation/<id>`. Without auth configured, open invocations by URL; they do not appear in the build history list.
 
-The saved report for `//lib:math` (invocation `292ccdcd-b9af-4aa7-9a7a-def0bc0e214b`, a cache-hit run) is at [root's build //lib:math report](docs/reports/root's%20build%20__lib_math%20_%20BuildBuddy.html). Its `_files` folder is missing, so styles and tabs do not load when the file is opened locally.
+The saved report for `//lib:math` (invocation `292ccdcd-b9af-4aa7-9a7a-def0bc0e214b`, a cache-hit run) is here [docs/reports/root's build __lib_math _ BuildBuddy.html](docs/reports/root's%20build%20__lib_math%20_%20BuildBuddy.html) can be downloaded and viewed in browser for analysis reference.
 
 The screenshots below are from invocation `a63a7633-ab07-45c9-a0bb-a31c1b0be05f` and show each part of the UI.
 
