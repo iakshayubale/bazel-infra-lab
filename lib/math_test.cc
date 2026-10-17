@@ -47,4 +47,34 @@ TEST(MathTest, SqrtNegative) {
   EXPECT_THROW(Sqrt(-1.0), std::invalid_argument);
 }
 
+TEST(MathTest, DivideNegativeOperands) {
+  EXPECT_EQ(Divide(-6, 2), -3);
+  EXPECT_EQ(Divide(6, -2), -3);
+  EXPECT_EQ(Divide(-6, -2), 3);
+}
+
+TEST(MathTest, DivideZeroNumerator) {
+  EXPECT_EQ(Divide(0, 5), 0);
+  EXPECT_THROW(Divide(0, 0), std::invalid_argument);
+}
+
+TEST(MathTest, DivideTruncatesTowardZero) {
+  // Integer division: the fractional part is discarded.
+  EXPECT_EQ(Divide(7, 2), 3);
+  EXPECT_EQ(Divide(-7, 2), -3);
+}
+
+TEST(MathTest, MultiplyNegativeOperands) {
+  EXPECT_EQ(Multiply(-2, -3), 6);
+}
+
+TEST(MathTest, SquareNegative) {
+  EXPECT_DOUBLE_EQ(Square(-3.0), 9.0);
+}
+
+TEST(MathTest, SqrtFractional) {
+  EXPECT_DOUBLE_EQ(Sqrt(0.25), 0.5);
+  EXPECT_DOUBLE_EQ(Sqrt(2.25), 1.5);
+}
+
 }  // namespace math
