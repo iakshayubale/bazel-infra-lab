@@ -25,6 +25,6 @@ cc_test(
     srcs = ["hello_test.cc"],
     deps = [
         ":hello_lib",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
