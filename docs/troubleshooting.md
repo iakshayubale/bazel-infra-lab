@@ -57,15 +57,15 @@ curl -s http://bazel-remote:8080/status | jq '.NumFiles, .CurrSize, .Uncompresse
 ```bash
 # Symptom: bazel build fails with "grpc://bazel-remote:9092 connection refused"
 
-# Solution: Verify bazel-remote server is running
-docker-compose -f docker-compose.bazel-remote-server.yml logs bazel-remote | tail -20
-docker-compose -f docker-compose.bazel-remote-server.yml ps  # Check if bazel-remote is healthy
+# Solution: Verify bazel-remote server is running (run from the repository root)
+docker-compose -f infrastructure/docker/docker-compose.bazel-remote-server.yml logs bazel-remote | tail -20
+docker-compose -f infrastructure/docker/docker-compose.bazel-remote-server.yml ps  # Check if bazel-remote is healthy
 
 # If not healthy, check the healthcheck logs:
-docker-compose -f docker-compose.bazel-remote-server.yml logs bazel-remote | grep -i "health\|error"
+docker-compose -f infrastructure/docker/docker-compose.bazel-remote-server.yml logs bazel-remote | grep -i "health\|error"
 
 # Restart the server:
-docker-compose -f docker-compose.bazel-remote-server.yml restart
+docker-compose -f infrastructure/docker/docker-compose.bazel-remote-server.yml restart
 ```
 
 ## Issue: Dev container can't connect to bazel-remote
@@ -77,15 +77,15 @@ docker-compose -f docker-compose.bazel-remote-server.yml restart
 docker network inspect docker_bazel-remote-network
 # Should show both bazel-remote-server and dev container
 
-# Verify hostname resolution inside container:
-docker-compose -f docker-compose.bazel-infra-lab.yml run dev bash
+# Verify hostname resolution inside container (<name> is any container name):
+docker-compose -f infrastructure/docker/docker-compose.bazel-infra-lab.yml run --name <name> bazel-infra-lab bash
 # Inside container:
 nslookup bazel-remote
 # Should resolve to bazel-remote-server's IP
 
 # If not resolving, restart the server and dev:
-docker-compose -f docker-compose.bazel-remote-server.yml down --remove-orphans
-docker-compose -f docker-compose.bazel-remote-server.yml up -d
+docker-compose -f infrastructure/docker/docker-compose.bazel-remote-server.yml down --remove-orphans
+docker-compose -f infrastructure/docker/docker-compose.bazel-remote-server.yml up -d
 ```
 
 ## Issue: Cache not being shared between dev containers
@@ -97,16 +97,16 @@ docker-compose -f docker-compose.bazel-remote-server.yml up -d
 docker network inspect docker_bazel-remote-network
 # Should show: bazel-remote-server and multiple dev containers
 
-# Verify hostname resolution inside dev container:
-docker-compose -f docker-compose.bazel-infra-lab.yml run dev bash
+# Verify hostname resolution inside dev container (<name> is any container name):
+docker-compose -f infrastructure/docker/docker-compose.bazel-infra-lab.yml run --name <name> bazel-infra-lab bash
 # Inside container:
 nslookup bazel-remote
 # Should resolve to bazel-remote-server's IP
 
 # If not resolving, restart and reconnect:
-docker-compose -f docker-compose.bazel-remote-server.yml restart bazel-remote
+docker-compose -f infrastructure/docker/docker-compose.bazel-remote-server.yml restart bazel-remote
 # Then run a new dev container
-docker-compose -f docker-compose.bazel-infra-lab.yml run dev bash
+docker-compose -f infrastructure/docker/docker-compose.bazel-infra-lab.yml run --name <name> bazel-infra-lab bash
 ```
 
 ## Issue: Persistent cache not surviving server restart
@@ -119,7 +119,7 @@ docker volume ls | grep bazel-remote-cache
 # Should show: docker_bazel-remote-cache
 
 # Restart server (volume should remount):
-docker-compose -f docker-compose.bazel-remote-server.yml up -d
+docker-compose -f infrastructure/docker/docker-compose.bazel-remote-server.yml up -d
 
 # Verify cache persists (from inside new container):
 curl -s http://bazel-remote:8080/status | jq '.NumFiles'
