@@ -1,10 +1,7 @@
 # Bazel build outputs
-bazel-bin/
-bazel-genfiles/
-bazel-out/
-bazel-testlogs/
-bazel-*/  # Root directory symlinks created by Bazel
-/bazel-*/
+# No trailing slash: Bazel's root output entries are symlinks, which
+# directory-only patterns (ending in "/") do not match.
+/bazel-*
 
 # Bazel cache
 .bazel-cache/
