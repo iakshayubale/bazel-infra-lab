@@ -89,6 +89,6 @@ jobs:
         run: |
           echo "[DOCS] Verifying documentation..."
           test -f README.md && echo "✅ README.md present"
-          test -f DEVELOPMENT.md && echo "✅ DEVELOPMENT.md present"
+          test -f CONTRIBUTING.md && echo "✅ CONTRIBUTING.md present"
           test -f LICENSE && echo "✅ LICENSE present"
           test -d docs/ && echo "✅ docs/ directory present"
