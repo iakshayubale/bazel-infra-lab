@@ -24,13 +24,11 @@ cc_library(
 
 ### Pin Dependency Versions
 
+This repo uses bzlmod, so dependencies are declared in `MODULE.bazel`, not `WORKSPACE`. Commit `MODULE.bazel.lock` so resolved versions stay reproducible:
+
 ```python
-# WORKSPACE
-http_archive(
-    name = "com_google_absl",
-    sha256 = "abc123...",  # ✅ Pin exact version
-    urls = ["..."],
-)
+# MODULE.bazel
+bazel_dep(name = "abseil-cpp", version = "20240116.2")  # ✅ Pin exact version
 ```
 
 ### Avoid Non-Hermetic Rules
@@ -89,7 +87,7 @@ config:remote-cache \
 - `remote_timeout=3600s`: Long timeout for large builds
 - `upload_local_results=true`: Contributes results to cache for team sharing
 
-**Important**: Always use `grpc://localhost:9092` for bazel-remote, never `http://`
+**Important**: Use `grpc://` for the cache. From the host, the endpoint is `grpc://localhost:9092`. Inside the dev container, `.bazelrc` uses `grpc://bazel-remote:9092` because `localhost` refers to the container itself.
 
 ### Parallel Builds
 
@@ -164,7 +162,7 @@ Configuration:
 ```bash
 # .bazelrc
 common --disk_cache=/path/to/local/cache
-common --remote_cache=http://bazel-cache.example.com:8085
+common --remote_cache=grpc://bazel-cache.example.com:9092
 ```
 
 ### Cache Invalidation
